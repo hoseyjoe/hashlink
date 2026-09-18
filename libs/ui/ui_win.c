@@ -1,6 +1,8 @@
 #define HL_NAME(n) ui_##n
 #include <windows.h>
 #include <richedit.h>
+#define COBJMACROS       // IFileDialog_* wrappers: this file is C, not C++
+#include <shobjidl.h>
 #include <hl.h>
 
 #define CLASS_NAME		USTR("HLUIWindow")
@@ -325,6 +327,61 @@ HL_PRIM vbyte *HL_NAME(ui_choose_file)( bool forSave, vdynamic *options ) {
 	return hl_copy_bytes((vbyte*)outputFile, (int)(wcslen(outputFile)+1)*2);
 }
 
+/*
+	Choose a directory, as ui_choose_file chooses a file: same option bag, same
+	UTF-16 result, NULL when the user cancels.
+
+	IFileDialog with FOS_PICKFOLDERS rather than SHBrowseForFolder, because it
+	is the Explorer-style dialog people expect -- typed paths, Quick Access,
+	network locations -- where SHBrowseForFolder is the old tree-in-a-box. The
+	price is COM, hence the initialise/uninitialise dance below.
+*/
+HL_PRIM vbyte *HL_NAME(ui_choose_dir)( vdynamic *options ) {
+	wref *win = (wref*)hl_dyn_getp(options,hl_hash_utf8("window"), &hlt_abstract);
+	wchar_t *title = (wchar_t*)hl_dyn_getp(options,hl_hash_utf8("title"),&hlt_bytes);
+	wchar_t *directory = (wchar_t*)hl_dyn_getp(options,hl_hash_utf8("directory"),&hlt_bytes);
+	IFileDialog *dlg = NULL;
+	IShellItem *item = NULL;
+	PWSTR selected = NULL;
+	vbyte *result = NULL;
+	DWORD opts;
+	HRESULT hr;
+	// The host may have initialised COM in the other mode already. That is not
+	// a failure -- it only means the uninitialise below is not ours to call.
+	HRESULT init = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if( init != S_OK && init != S_FALSE && init != RPC_E_CHANGED_MODE )
+		return NULL;
+
+	hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileDialog, (void**)&dlg);
+	if( SUCCEEDED(hr) ) {
+		if( SUCCEEDED(IFileDialog_GetOptions(dlg, &opts)) )
+			IFileDialog_SetOptions(dlg, opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+		if( title )
+			IFileDialog_SetTitle(dlg, title);
+		if( directory ) {
+			// Where to open. Failing to resolve it is not worth refusing the
+			// dialog over: the user still gets the default location.
+			IShellItem *start = NULL;
+			if( SUCCEEDED(SHCreateItemFromParsingName(directory, NULL, &IID_IShellItem, (void**)&start)) ) {
+				IFileDialog_SetFolder(dlg, start);
+				IShellItem_Release(start);
+			}
+		}
+		if( SUCCEEDED(IFileDialog_Show(dlg, win ? win->h : NULL)) && SUCCEEDED(IFileDialog_GetResult(dlg, &item)) ) {
+			if( SUCCEEDED(IShellItem_GetDisplayName(item, SIGDN_FILESYSPATH, &selected)) ) {
+				result = hl_copy_bytes((vbyte*)selected, (int)(wcslen(selected)+1)*2);
+				CoTaskMemFree(selected);
+			}
+			IShellItem_Release(item);
+		}
+		IFileDialog_Release(dlg);
+	}
+
+	if( init != RPC_E_CHANGED_MODE )
+		CoUninitialize();
+	return result;
+}
+
 HL_PRIM bool HL_NAME(ui_set_clipboard_text)(char* text) {
 	if (!OpenClipboard(NULL))
 		return false;
@@ -398,6 +455,7 @@ DEFINE_PRIM(_VOID, ui_sentinel_pause, _SENTINEL _BOOL);
 DEFINE_PRIM(_BOOL, ui_sentinel_is_paused, _SENTINEL);
 
 DEFINE_PRIM(_BYTES, ui_choose_file, _BOOL _DYN);
+DEFINE_PRIM(_BYTES, ui_choose_dir, _DYN);
 
 DEFINE_PRIM(_BOOL, ui_set_clipboard_text, _BYTES);
 DEFINE_PRIM(_BYTES, ui_get_clipboard_text, _NO_ARG);
