@@ -73,17 +73,18 @@ class Window {
 
 	function set_displayMode(mode) {
 		displayMode = mode;
+		var monitor = selectedMonitor != null ? @:privateAccess selectedMonitor.bytes : null;
 		if(mode == Windowed) {
-			dx.Window.winChangeDisplaySetting(selectedMonitor != null ? @:privateAccess selectedMonitor.bytes : null, null);
-			winSetFullscreen(win, false);
+			dx.Window.winChangeDisplaySetting(monitor, null);
+			winSetFullscreenOn(win, false, monitor);
 		}
 		else if(mode == Borderless) {
-			dx.Window.winChangeDisplaySetting(selectedMonitor != null ? @:privateAccess selectedMonitor.bytes : null, null);
-			winSetFullscreen(win,true);
+			dx.Window.winChangeDisplaySetting(monitor, null);
+			winSetFullscreenOn(win, true, monitor);
 		}
 		else {
-			var r = dx.Window.winChangeDisplaySetting(selectedMonitor != null ? @:privateAccess selectedMonitor.bytes : null, displaySetting);
-			winSetFullscreen(win,true);
+			var r = dx.Window.winChangeDisplaySetting(monitor, displaySetting);
+			winSetFullscreenOn(win, true, monitor);
 		}
 		return mode;
 	}
@@ -179,6 +180,25 @@ class Window {
 		icon = newIcon;
 	}
 
+	/**
+		Set the window icon by loading a given .ico file from disk.
+	**/
+	public function setIconFromFile(path: String) {
+		var newIcon = Icon.loadIcon(path != null ? @:privateAccess path.bytes : null, -1, -1);
+		if (newIcon == null) {
+			throw "couldn't load icon";
+			return;
+		}
+
+		winSetIcon(win, newIcon);
+
+		if (icon != null) {
+			icon.destroy();
+		}
+
+		icon = newIcon;
+	}
+
 	public function getNextEvent( e : Event ) : Bool {
 		return winGetNextEvent(win, e);
 	}
@@ -218,6 +238,14 @@ class Window {
 
 	public static function getCurrentDisplaySetting(monitor : MonitorHandle, registry : Bool = false) : DisplaySetting {
 		return winGetCurrentDisplaySetting(monitor != null ? @:privateAccess monitor.bytes : null, registry);
+	}
+
+	public function setZoomed(zoomed: Bool) : Void {
+		winSetZoomed(win, zoomed);
+	}
+
+	public function isZoomed() : Bool {
+		return winIsZoomed(win);
 	}
 
 	public static function getMonitors() : Array<Monitor> {
@@ -305,6 +333,15 @@ class Window {
 		return null;
 	}
 
+	@:hlNative("?directx", "win_set_zoomed")
+	static function winSetZoomed(win: WinPtr, zoomed: Bool) {
+	}
+
+	@:hlNative("?directx", "win_is_zoomed")
+	static function winIsZoomed(win: WinPtr) : Bool {
+		return false;
+	}
+
 	@:hlNative("?directx", "win_get_current_display_setting")
 	static function winGetCurrentDisplaySetting(monitor : hl.Bytes, registry : Bool) : Dynamic {
 		return null;
@@ -337,6 +374,11 @@ class Window {
 	}
 
 	static function winSetFullscreen( win : WinPtr, fs : Bool ) {
+	}
+
+	@:hlNative("?directx", "win_set_fullscreen_on")
+	static function winSetFullscreenOn( win : WinPtr, fs : Bool, monitor : hl.Bytes ) {
+		winSetFullscreen(win, fs);
 	}
 
 	static function winSetSize( win : WinPtr, width : Int, height : Int ) {
@@ -442,6 +484,13 @@ class Window {
 
 	@:hlNative("?directx", "win_set_icon")
 	static function winSetIcon(win: WinPtr, icon: Icon) : Void {
+	}
+
+	/**
+		Set the default icon to use when creating a new window.
+	**/
+	@:hlNative("?directx", "win_set_default_icon")
+	public static function setDefaultIcon(icon: Icon) : Void {
 	}
 
 }

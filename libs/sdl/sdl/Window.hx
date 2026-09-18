@@ -316,6 +316,22 @@ class Window {
 		windows.remove(this);
 	}
 
+	public function setMaximized(maximized: Bool) : Void {
+		winSetMaximized(win, maximized);
+	}
+
+	@:hlNative("?sdl", "win_set_maximized")
+	static function winSetMaximized( win : WinPtr, maximized : Bool ) {}
+
+	public function isMaximized() {
+		return winMaximized(win);
+	}
+
+	@:hlNative("?sdl", "win_maximized")
+	static function winMaximized( win : WinPtr ) : Bool {
+		return false;
+	}
+
 	public function maximize() {
 		winResize(win, 0);
 	}
