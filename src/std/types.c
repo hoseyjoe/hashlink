@@ -691,6 +691,7 @@ typedef struct {
 	int todos_pos;
 	int todos_size;
 	int flags;
+	vdynamic * volatile root;
 } mem_context;
 
 #define compact_grow(buf,pos,size,req,type) \
@@ -911,7 +912,7 @@ static void compact_write_content( mem_context *ctx, vdynamic *d ) {
 			compact_pad(ctx,&hlt_dyn);
 			for(i=0;i<obj->nvalues;i++) {
 				int j;
-				for(j=0;i<obj->nfields;j++) {
+				for(j=0;j<obj->nfields;j++) {
 					if( (obj->lookup[j].field_index&HL_DYNOBJ_INDEX_MASK) == i && hl_is_ptr(obj->lookup[j].t) ) {
 						compact_write_data(ctx, obj->lookup[j].t, obj->values + i);
 						break;
@@ -965,6 +966,7 @@ HL_PRIM vdynamic *hl_mem_compact( vdynamic *d, varray *exclude, int flags, int *
 	int i;
 	int object_count = 0;
 	memset(ctx,0,sizeof(mem_context));
+	ctx->root = d; // retain the graph while we walk it
 	ctx->lookup = hl_mlookup_alloc();
 	ctx->flags = flags;
 	compact_lookup_ref(ctx,d,false);
