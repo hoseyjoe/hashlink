@@ -1108,7 +1108,18 @@ HL_PRIM vbyte *HL_NAME(cert_write_self_signed)(hl_ssl_pkey *key, vbyte *cn, int 
 	mbedtls_x509write_crt_set_issuer_key(&crt, key->k);   // self-signed
 	r = mbedtls_x509write_crt_set_subject_name(&crt, subject);
 	if (r == 0) r = mbedtls_x509write_crt_set_issuer_name(&crt, subject);
+#if MBEDTLS_VERSION_NUMBER >= 0x03040000
 	if (r == 0) r = mbedtls_x509write_crt_set_serial_raw(&crt, serial, sizeof(serial));
+#else
+	// set_serial_raw only arrived in 3.4; Linux distros still ship 2.28
+	if (r == 0) {
+		mbedtls_mpi sn;
+		mbedtls_mpi_init(&sn);
+		r = mbedtls_mpi_read_binary(&sn, serial, sizeof(serial));
+		if (r == 0) r = mbedtls_x509write_crt_set_serial(&crt, &sn);
+		mbedtls_mpi_free(&sn);
+	}
+#endif
 	if (r == 0) r = mbedtls_x509write_crt_set_validity(&crt, from, to);
 	if (r == 0) r = mbedtls_x509write_crt_set_basic_constraints(&crt, 0, -1);
 	if (r == 0) {
