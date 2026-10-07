@@ -949,3 +949,186 @@ HL_PRIM void HL_NAME(ssl_init)() {
 }
 
 DEFINE_PRIM(_VOID, ssl_init, _NO_ARG);
+
+// ---------------------------------------------------------------------------
+// Making an identity, rather than only reading one.
+//
+// Everything above this line loads keys and certificates that something else
+// produced. These four make one: an RSA key, a self-signed certificate over
+// it, and the raw DER of any certificate — which is what a protocol needs when
+// it hashes the peer's public key rather than merely trusting it.
+//
+// Added for clients that must stand up their own identity on a device with no
+// shell to run `openssl` in (Android). mbedtls could always do this; nothing
+// had exposed it.
+//
+// TWO IMPLEMENTATIONS, because mbedtls 4 removed the old one. Up to 3.x a key
+// is generated straight into a pk context with the library's own RNG; from 4.x
+// key generation belongs to PSA and is copied back into a pk context to be
+// written out. Everything after that step is common to both.
+// ---------------------------------------------------------------------------
+
+#include "mbedtls/x509_crt.h"
+#include <time.h>
+
+#if MBEDTLS_VERSION_MAJOR < 4
+#include "mbedtls/rsa.h"
+#endif
+
+/** The DER this certificate was parsed from, byte for byte. mbedtls keeps it
+    on the chain (`raw`), so this hands back what the peer actually sent — the
+    bytes a fingerprint or a key hash has to be computed over.
+
+    Answers null for a null certificate rather than faulting, which also makes
+    it the cheapest way for a caller to ask whether these primitives exist. */
+HL_PRIM vbyte *HL_NAME(cert_get_der)(hl_ssl_cert *cert, int *size) {
+	vbyte *out;
+	if (cert == NULL || cert->c == NULL || cert->c->raw.p == NULL) {
+		*size = 0;
+		return NULL;
+	}
+	*size = (int)cert->c->raw.len;
+	out = hl_alloc_bytes(*size);
+	memcpy(out, cert->c->raw.p, *size);
+	return out;
+}
+
+/** A fresh RSA private key. `bits` is the modulus size (2048 is the sane
+    floor); the public exponent is 65537, as every other tool picks. */
+HL_PRIM hl_ssl_pkey *HL_NAME(key_generate_rsa)(int bits) {
+	int r;
+	hl_ssl_pkey *key;
+	mbedtls_pk_context *pk;
+	HL_NAME(ssl_init)();   // seeds the RNG / starts PSA, and only there
+	pk = (mbedtls_pk_context *)malloc(sizeof(mbedtls_pk_context));
+	mbedtls_pk_init(pk);
+#if MBEDTLS_VERSION_MAJOR >= 4
+	{
+		psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+		mbedtls_svc_key_id_t id = MBEDTLS_SVC_KEY_ID_INIT;
+		psa_status_t s;
+		psa_set_key_type(&attr, PSA_KEY_TYPE_RSA_KEY_PAIR);
+		psa_set_key_bits(&attr, (size_t)bits);
+		// EXPORT because the key has to leave PSA twice: into the pk context
+		// that signs the certificate, and into the PEM written to disk.
+		psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_SIGN_HASH |
+			PSA_KEY_USAGE_SIGN_MESSAGE | PSA_KEY_USAGE_EXPORT);
+		psa_set_key_algorithm(&attr, PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256));
+		s = psa_generate_key(&attr, &id);
+		r = (s == PSA_SUCCESS) ? 0 : (int)s;
+		if (r == 0) {
+			r = mbedtls_pk_copy_from_psa(id, pk);
+			psa_destroy_key(id);   // the pk context has its own copy now
+		}
+	}
+#else
+	r = mbedtls_pk_setup(pk, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA));
+	if (r == 0)
+		r = mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), mbedtls_ctr_drbg_random,
+			&ctr_drbg, (unsigned int)bits, 65537);
+#endif
+	if (r != 0) {
+		mbedtls_pk_free(pk);
+		free(pk);
+		ssl_error(r);
+		return NULL;
+	}
+	key = (hl_ssl_pkey*)hl_gc_alloc_finalizer(sizeof(hl_ssl_pkey));
+	key->k = pk;
+	key->finalize = pkey_finalize;
+	return key;
+}
+
+/** The private key as PEM, ready to be written beside the certificate. */
+HL_PRIM vbyte *HL_NAME(key_write_pem)(hl_ssl_pkey *key) {
+	// Comfortably past a 4096-bit key's PEM. mbedtls writes from the END of
+	// this buffer, so it must not be tight.
+	unsigned char buf[16000];
+	int r;
+	if (key == NULL || key->k == NULL) return NULL;
+	memset(buf, 0, sizeof(buf));
+	r = mbedtls_pk_write_key_pem(key->k, buf, sizeof(buf));
+	if (r != 0) {
+		ssl_error(r);
+		return NULL;
+	}
+	return hl_copy_bytes((vbyte*)buf, (int)strlen((char*)buf) + 1);
+}
+
+/**
+ * A self-signed certificate over `key`, valid from a day ago (so a peer whose
+ * clock runs slightly behind ours does not reject it as not-yet-valid) until
+ * `days` from now. `cn` is the common name, and is the whole subject.
+ */
+HL_PRIM vbyte *HL_NAME(cert_write_self_signed)(hl_ssl_pkey *key, vbyte *cn, int days) {
+	mbedtls_x509write_cert crt;
+	unsigned char buf[8192];
+	unsigned char serial[16];
+	char subject[512];
+	char from[16], to[16];
+	time_t now, t0, t1;
+	struct tm tm0, tm1;
+	int r, i;
+
+	if (key == NULL || key->k == NULL) return NULL;
+	HL_NAME(ssl_init)();
+
+	// A serial unlikely to repeat between two installs. Nothing here consults
+	// it, but two certificates from one issuer sharing a serial is malformed.
+	r = -1;
+#if MBEDTLS_VERSION_MAJOR >= 4
+	r = (psa_generate_random(serial, sizeof(serial)) == PSA_SUCCESS) ? 0 : -1;
+#else
+	r = mbedtls_ctr_drbg_random(&ctr_drbg, serial, sizeof(serial));
+#endif
+	if (r != 0)
+		for (i = 0; i < (int)sizeof(serial); i++) serial[i] = (unsigned char)(i + 1);
+	serial[0] &= 0x7F;             // a positive INTEGER
+	if (serial[0] == 0) serial[0] = 1;
+
+	snprintf(subject, sizeof(subject), "CN=%s", cn == NULL ? "client" : (char*)cn);
+
+	now = time(NULL);
+	t0 = now - 24 * 60 * 60;
+	t1 = now + (time_t)days * 24 * 60 * 60;
+#ifdef HL_WIN
+	gmtime_s(&tm0, &t0);
+	gmtime_s(&tm1, &t1);
+#else
+	gmtime_r(&t0, &tm0);
+	gmtime_r(&t1, &tm1);
+#endif
+	strftime(from, sizeof(from), "%Y%m%d%H%M%S", &tm0);
+	strftime(to, sizeof(to), "%Y%m%d%H%M%S", &tm1);
+
+	mbedtls_x509write_crt_init(&crt);
+	mbedtls_x509write_crt_set_version(&crt, MBEDTLS_X509_CRT_VERSION_3);
+	mbedtls_x509write_crt_set_md_alg(&crt, MBEDTLS_MD_SHA256);
+	mbedtls_x509write_crt_set_subject_key(&crt, key->k);
+	mbedtls_x509write_crt_set_issuer_key(&crt, key->k);   // self-signed
+	r = mbedtls_x509write_crt_set_subject_name(&crt, subject);
+	if (r == 0) r = mbedtls_x509write_crt_set_issuer_name(&crt, subject);
+	if (r == 0) r = mbedtls_x509write_crt_set_serial_raw(&crt, serial, sizeof(serial));
+	if (r == 0) r = mbedtls_x509write_crt_set_validity(&crt, from, to);
+	if (r == 0) r = mbedtls_x509write_crt_set_basic_constraints(&crt, 0, -1);
+	if (r == 0) {
+		memset(buf, 0, sizeof(buf));
+#if MBEDTLS_VERSION_MAJOR >= 4
+		r = mbedtls_x509write_crt_pem(&crt, buf, sizeof(buf));
+#else
+		r = mbedtls_x509write_crt_pem(&crt, buf, sizeof(buf),
+			mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
+	}
+	mbedtls_x509write_crt_free(&crt);
+	if (r != 0) {
+		ssl_error(r);
+		return NULL;
+	}
+	return hl_copy_bytes((vbyte*)buf, (int)strlen((char*)buf) + 1);
+}
+
+DEFINE_PRIM(_BYTES, cert_get_der, TCERT _REF(_I32));
+DEFINE_PRIM(TPKEY, key_generate_rsa, _I32);
+DEFINE_PRIM(_BYTES, key_write_pem, TPKEY);
+DEFINE_PRIM(_BYTES, cert_write_self_signed, TPKEY _BYTES _I32);
