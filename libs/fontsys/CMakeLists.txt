@@ -28,11 +28,14 @@ if(WIN32)
     set(FONTSYS_FIND_SOURCES fontsys_find_win.cpp)   # DirectWrite
 elseif(APPLE)
     set(FONTSYS_FIND_SOURCES fontsys_find_apple.c)   # CoreText (macOS, iOS)
-elseif(UNIX AND NOT ANDROID)
+elseif(ANDROID)
+    # AFontMatcher (API 29+, looked up at run time), else /system/etc/fonts.xml
+    set(FONTSYS_FIND_SOURCES fontsys_find_android.c fontsys_fontsxml.c fontsys_fontsxml.h)
+elseif(UNIX)
     set(FONTSYS_FIND_SOURCES fontsys_find_linux.c)   # fontconfig
     find_package(Fontconfig REQUIRED)
 else()
-    set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)    # Android: Task 5
+    set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)
 endif()
 
 # Everything except the HashLink bindings: no libhl dependency, so the
@@ -57,6 +60,12 @@ if(APPLE)
     # PUBLIC: a static library, so whatever links fontsys_core needs them.
     target_link_libraries(fontsys_core PUBLIC "-framework CoreText" "-framework CoreFoundation")
 endif()
+if(ANDROID)
+    # PUBLIC: a static library, so whatever links fontsys_core needs them.
+    # libandroid is linked for API 24; the API 29 AFontMatcher_* functions are
+    # looked up with dlsym, so nothing here requires API 29.
+    target_link_libraries(fontsys_core PUBLIC android log ${CMAKE_DL_LIBS})
+endif()
 if(UNIX AND NOT APPLE AND NOT ANDROID)
     # PUBLIC: a static library, so whatever links fontsys_core needs it.
     target_include_directories(fontsys_core PRIVATE ${Fontconfig_INCLUDE_DIRS})
@@ -75,4 +84,10 @@ if(BUILD_TESTING)
     add_executable(fontsys_test test/fontsys_test.c)
     target_link_libraries(fontsys_test fontsys_core)
     add_test(NAME fontsys COMMAND fontsys_test)
+
+    # The Android fonts.xml parser is plain C: tested on every platform.
+    add_executable(fontsys_fontsxml_test test/fontsys_fontsxml_test.c fontsys_fontsxml.c)
+    target_include_directories(fontsys_fontsxml_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_test(NAME fontsys_fontsxml
+             COMMAND fontsys_fontsxml_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/fonts.xml)
 endif()

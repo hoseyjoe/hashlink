@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Test fixture for fontsys_fontsxml_test: a trimmed /system/etc/fonts.xml,
+    shaped like AOSP frameworks/base/data/fonts/fonts.xml (API 24-31). Not a
+    real device file. The test asserts its exact contents: keep them in step.
+
+    <family lang="xx"><font weight="400">Ghost.ttf</font></family>
+-->
+<familyset version="23">
+    <!-- first family is default -->
+    <family name="sans-serif">
+        <font weight="100" style="normal">Roboto-Thin.ttf</font>
+        <font weight="100" style="italic">Roboto-ThinItalic.ttf</font>
+        <font weight="400" style="normal">Roboto-Regular.ttf</font>
+        <font style="italic" weight="400">Roboto-Italic.ttf</font>
+        <font weight = "700" style="normal">
+            Roboto-Bold.ttf
+        </font>
+        <font weight="700" style="italic">Roboto-BoldItalic.ttf</font>
+        <font weight="900" style="normal">Roboto-Black.ttf</font>
+    </family>
+
+    <!-- Note that aliases must come after the fonts they reference. -->
+    <alias name="sans-serif-thin" to="sans-serif" weight="100" />
+    <alias name="arial" to="sans-serif" />
+
+    <family name="sans-serif-condensed">
+        <font weight="400" style="normal">RobotoCondensed-Regular.ttf</font>
+    </family>
+
+    <family name="serif">
+        <font weight="400" style="normal">NotoSerif-Regular.ttf</font>
+    </family>
+
+    <family name="monospace">
+        <font weight="400" style="normal">DroidSansMono.ttf</font>
+    </family>
+    <alias name="sans-serif-monospace" to="monospace" />
+
+    <!-- API 31 style: variable fonts, one file per slant, axes inside the font element -->
+    <family name='sans-serif-flex'>
+        <font weight='300' style='normal'>RobotoFlex-Regular.ttf
+            <axis tag="wght" stylevalue="300" />
+        </font>
+        <font weight='300' style='italic'>RobotoFlex-Italic.ttf
+            <axis tag="wght" stylevalue="300" />
+        </font>
+        <font weight='700' style='italic'>RobotoFlex-Italic.ttf
+            <axis tag="wght" stylevalue="700" />
+        </font>
+    </family>
+
+    <family name="empty-family">
+        <font weight="400" style="normal">   </font>
+    </family>
+
+    <!-- fallback fonts -->
+    <family lang="und-Ethi">
+        <font weight="400" style="normal">NotoSansEthiopic-Regular.ttf</font>
+        <font weight="700" style="normal">NotoSansEthiopic-Bold.ttf</font>
+    </family>
+    <family>
+        <font weight="400" style="normal">NotoSansSymbols-Regular-Subsetted.ttf</font>
+    </family>
+    <family lang="zh-Hans">
+        <font weight="400" style="normal" index="2" postScriptName="NotoSansCJKjp-Regular">NotoSansCJK-Regular.ttc</font>
+        <font weight="400" style="normal" index="2" fallbackFor="serif"
+              postScriptName="NotoSerifCJKjp-Regular">NotoSerifCJK-Regular.ttc</font>
+    </family>
+    <family lang="zh-Hant,zh-Bopo">
+        <font weight="400" style="normal" index="3">NotoSansCJK-Regular.ttc</font>
+        <font weight="400" style="normal" index="3" fallbackFor="serif">NotoSerifCJK-Regular.ttc</font>
+    </family>
+    <family lang="ja">
+        <font weight="400" style="normal" index="0">NotoSansCJK-Regular.ttc</font>
+        <font weight="400" style="normal" index="0" fallbackFor="serif">NotoSerifCJK-Regular.ttc</font>
+    </family>
+    <family lang="ko">
+        <font weight="400" style="normal" index="1" fallbackFor="serif">NotoSerifCJK-Regular.ttc</font>
+        <font index="1" weight="400" style="normal">NotoSansCJK-Regular.ttc</font>
+    </family>
+    <family lang="und-Zsye">
+        <font weight="400" style="normal">NotoColorEmoji.ttf</font>
+    </family>
+    <family lang="und-Zsym">
+        <font weight="400" style="normal">/product/fonts/Extra.ttf</font>
+    </family>
+</familyset>

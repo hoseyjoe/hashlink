@@ -38,6 +38,12 @@ void **fontsys_os_state(fontsys_ctx *ctx);
    opened only for the comparison: none enter the face cache. */
 int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_name, unsigned cp);
 
+/* 1 when face index of the font file at path (UTF-8) maps cp, else 0 (also
+   when it cannot be opened). Answered from the face cache when the face is
+   there; otherwise the face is opened only for the check and does not enter
+   the cache, so a lookup can test many files (Android fonts.xml). */
+int fontsys_file_has(fontsys_ctx *ctx, const char *path, int index, unsigned cp);
+
 #ifdef __cplusplus
 }
 #endif

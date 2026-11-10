@@ -196,6 +196,21 @@ int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_n
     return first_covering;
 }
 
+int fontsys_file_has(fontsys_ctx *ctx, const char *path, int index, unsigned cp) {
+    FT_Face face = NULL;
+    int i, has;
+
+    if (!ctx || !path || index < 0) return 0;
+    for (i = 0; i < ctx->face_count; i++) {
+        if (ctx->faces[i].index == index && strcmp(ctx->faces[i].path, path) == 0)
+            return FT_Get_Char_Index(ctx->faces[i].face, cp) != 0;
+    }
+    if (open_ft_face(ctx->lib, path, index, &face) != 0) return 0;
+    has = FT_Get_Char_Index(face, cp) != 0;
+    FT_Done_Face(face);
+    return has;
+}
+
 int fontsys_face_open(fontsys_ctx *ctx, const char *path, int index) {
     FT_Face face = NULL;
     char *copy;

@@ -22,6 +22,8 @@ static int failures = 0;
 #   define DEFAULT_TEST_FONT "C:/Windows/Fonts/arial.ttf"
 #elif defined(__APPLE__)
 #   define DEFAULT_TEST_FONT "/System/Library/Fonts/Helvetica.ttc"
+#elif defined(__ANDROID__)
+#   define DEFAULT_TEST_FONT "/system/fonts/Roboto-Regular.ttf"
 #else
 #   define DEFAULT_TEST_FONT "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 #endif
@@ -189,6 +191,26 @@ static void test_file_face_index(const char *path) {
     fontsys_destroy(ctx);
 }
 
+/* fontsys_file_has (private, used by the Android fonts.xml lookup): a
+   coverage check that leaves the face cache alone. */
+static void test_file_has(const char *path) {
+    fontsys_ctx *ctx = fontsys_create();
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+    CHECK(fontsys_file_has(ctx, path, 0, 'H') == 1);
+    CHECK(fontsys_file_has(ctx, path, 0, NO_CP) == 0);
+    CHECK(fontsys_file_has(ctx, path, 999, 'H') == 0);   /* no such face */
+    CHECK(fontsys_file_has(ctx, "fontsys-no-such-dir/no-such-font.ttf", 0, 'H') == 0);
+    /* nothing entered the cache: the first face opened gets id 0 */
+    CHECK(fontsys_face_open(ctx, path, 0) == 0);
+    /* a cached face answers too */
+    CHECK(fontsys_file_has(ctx, path, 0, 'H') == 1);
+    CHECK(fontsys_face_open(ctx, path, 0) == 0);
+    CHECK(fontsys_debug_os_calls(ctx) == 0);
+    fontsys_destroy(ctx);
+}
+
 static int file_exists(const char *path) {
 #ifdef _WIN32
     wchar_t wpath[4 * MAX_PATH];
@@ -291,6 +313,7 @@ int main(void) {
 #endif
         test_render(ctx, face);
         test_file_face_index(path);
+        test_file_has(path);
     } else {
         fprintf(stderr, "cannot open test font '%s' (set FONTSYS_TEST_FONT)\n", path);
     }
