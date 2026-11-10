@@ -26,6 +26,8 @@ set(FREETYPE_SOURCES
 # nothing; per-OS lookups replace it.
 if(WIN32)
     set(FONTSYS_FIND_SOURCES fontsys_find_win.cpp)   # DirectWrite
+elseif(APPLE)
+    set(FONTSYS_FIND_SOURCES fontsys_find_apple.c)   # CoreText (macOS, iOS)
 else()
     set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)
 endif()
@@ -48,6 +50,10 @@ target_compile_definitions(fontsys_core PRIVATE
     FT2_BUILD_LIBRARY
     "FT_CONFIG_MODULES_H=\"ftmodule.h\""
 )
+if(APPLE)
+    # PUBLIC: a static library, so whatever links fontsys_core needs them.
+    target_link_libraries(fontsys_core PUBLIC "-framework CoreText" "-framework CoreFoundation")
+endif()
 if(MSVC)
     # Vendored FreeType is kept unmodified: silence its CRT deprecation and
     # 64-bit size_t narrowing warnings (C4244/C4267 at /W3) on its sources only.

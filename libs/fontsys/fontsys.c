@@ -143,9 +143,61 @@ static FT_Error win_open_face_wide(FT_Library lib, const char *path, int index, 
 }
 #endif
 
+/* FT_New_Face on a UTF-8 path. */
+static FT_Error open_ft_face(FT_Library lib, const char *path, int index, FT_Face *face) {
+    FT_Error err = FT_New_Face(lib, path, index, face);
+#ifdef _WIN32
+    if (err != 0 && has_non_ascii(path))
+        err = win_open_face_wide(lib, path, index, face);
+#endif
+    return err;
+}
+
+/* 1 if the face at index in path has PostScript name ps_name. */
+static int ps_name_is(FT_Library lib, const char *path, int index, const char *ps_name) {
+    FT_Face face = NULL;
+    const char *name;
+    int same;
+
+    if (open_ft_face(lib, path, index, &face) != 0) return 0;
+    name = FT_Get_Postscript_Name(face);
+    same = name && strcmp(name, ps_name) == 0;
+    FT_Done_Face(face);
+    return same;
+}
+
+int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_name, unsigned cp) {
+    FT_Face face = NULL;
+    FT_Long count, i, instances, j;
+    int first_covering = -1;
+
+    if (!ctx || !path) return -1;
+    if (open_ft_face(ctx->lib, path, 0, &face) != 0) return -1;
+    count = face->num_faces;
+    FT_Done_Face(face);
+    for (i = 0; i < count && i <= 0xFFFF; i++) {
+        const char *name;
+        if (open_ft_face(ctx->lib, path, (int)i, &face) != 0) continue;
+        name = FT_Get_Postscript_Name(face);
+        if (ps_name && name && strcmp(name, ps_name) == 0) {
+            FT_Done_Face(face);
+            return (int)i;
+        }
+        if (first_covering < 0 && FT_Get_Char_Index(face, cp) != 0) first_covering = (int)i;
+        instances = face->style_flags >> 16;
+        FT_Done_Face(face);
+        /* Variable fonts (the Apple system fonts among them): named
+           instances are faces (instance << 16) | i, instance from 1. */
+        for (j = 1; ps_name && j <= instances && j <= 0x7FFF; j++) {
+            int index = (int)((j << 16) | i);
+            if (ps_name_is(ctx->lib, path, index, ps_name)) return index;
+        }
+    }
+    return first_covering;
+}
+
 int fontsys_face_open(fontsys_ctx *ctx, const char *path, int index) {
     FT_Face face = NULL;
-    FT_Error err;
     char *copy;
     size_t len;
     int i;
@@ -157,12 +209,7 @@ int fontsys_face_open(fontsys_ctx *ctx, const char *path, int index) {
     }
     if (ctx->face_count >= FONTSYS_MAX_FACES) return -2;
 
-    err = FT_New_Face(ctx->lib, path, index, &face);
-#ifdef _WIN32
-    if (err != 0 && has_non_ascii(path))
-        err = win_open_face_wide(ctx->lib, path, index, &face);
-#endif
-    if (err != 0) return -1;
+    if (open_ft_face(ctx->lib, path, index, &face) != 0) return -1;
 
     len = strlen(path);
     copy = (char *)malloc(len + 1);

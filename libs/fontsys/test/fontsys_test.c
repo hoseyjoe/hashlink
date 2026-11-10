@@ -7,6 +7,7 @@
 #   include <wchar.h>
 #endif
 #include "fontsys.h"
+#include "fontsys_internal.h"
 
 static int failures = 0;
 
@@ -148,6 +149,46 @@ static void test_render(fontsys_ctx *ctx, int face) {
     }
 }
 
+/* fontsys_file_face_index (private, used by the Apple lookup): the face of a
+   font file named by PostScript name, else the first face that maps cp. */
+static void test_file_face_index(const char *path) {
+    fontsys_ctx *ctx = fontsys_create();
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+    /* no name match: the first face that maps the code point */
+    CHECK(fontsys_file_face_index(ctx, path, "fontsys-no-such-name", 'H') == 0);
+    CHECK(fontsys_file_face_index(ctx, path, NULL, 'H') == 0);
+    /* no name match and no face maps it */
+    CHECK(fontsys_file_face_index(ctx, path, "fontsys-no-such-name", NO_CP) == -1);
+    CHECK(fontsys_file_face_index(ctx, "fontsys-no-such-dir/no-such-font.ttf", NULL, 'H') == -1);
+#ifdef _WIN32
+    CHECK(fontsys_file_face_index(ctx, "C:/Windows/Fonts/arial.ttf", "ArialMT", 'H') == 0);
+    /* collections: the name wins over coverage (every face maps 'H') */
+    CHECK(fontsys_file_face_index(ctx, "C:/Windows/Fonts/msgothic.ttc", "MS-Gothic", 'H') == 0);
+    CHECK(fontsys_file_face_index(ctx, "C:/Windows/Fonts/msgothic.ttc", "MS-UIGothic", 'H') == 1);
+    CHECK(fontsys_file_face_index(ctx, "C:/Windows/Fonts/msgothic.ttc", "MS-PGothic", 'H') == 2);
+    CHECK(fontsys_file_face_index(ctx, "C:/Windows/Fonts/cambria.ttc", "CambriaMath", NO_CP) == 1);
+    /* variable font: a named instance is face (instance << 16) | index */
+    {
+        const char *bahn = "C:/Windows/Fonts/bahnschrift.ttf";
+        int index = fontsys_file_face_index(ctx, bahn, "Bahnschrift-Bold", 'H');
+        CHECK(index == 0x50000);
+        CHECK(fontsys_face_has(ctx, fontsys_face_open(ctx, bahn, index), 'H') == 1);
+        CHECK(fontsys_file_face_index(ctx, bahn, "Bahnschrift", 'H') == 0);
+    }
+#endif
+    /* the faces are opened only for the lookup: none enter the face cache
+       (only the one opened above, on Windows), and the OS is never asked */
+#ifdef _WIN32
+    CHECK(fontsys_face_open(ctx, path, 0) == 1);
+#else
+    CHECK(fontsys_face_open(ctx, path, 0) == 0);
+#endif
+    CHECK(fontsys_debug_os_calls(ctx) == 0);
+    fontsys_destroy(ctx);
+}
+
 static int file_exists(const char *path) {
 #ifdef _WIN32
     wchar_t wpath[4 * MAX_PATH];
@@ -249,6 +290,7 @@ int main(void) {
         test_open_non_ascii(path);
 #endif
         test_render(ctx, face);
+        test_file_face_index(path);
     } else {
         fprintf(stderr, "cannot open test font '%s' (set FONTSYS_TEST_FONT)\n", path);
     }
