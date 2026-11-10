@@ -28,8 +28,11 @@ if(WIN32)
     set(FONTSYS_FIND_SOURCES fontsys_find_win.cpp)   # DirectWrite
 elseif(APPLE)
     set(FONTSYS_FIND_SOURCES fontsys_find_apple.c)   # CoreText (macOS, iOS)
+elseif(UNIX AND NOT ANDROID)
+    set(FONTSYS_FIND_SOURCES fontsys_find_linux.c)   # fontconfig
+    find_package(Fontconfig REQUIRED)
 else()
-    set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)
+    set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)    # Android: Task 5
 endif()
 
 # Everything except the HashLink bindings: no libhl dependency, so the
@@ -53,6 +56,11 @@ target_compile_definitions(fontsys_core PRIVATE
 if(APPLE)
     # PUBLIC: a static library, so whatever links fontsys_core needs them.
     target_link_libraries(fontsys_core PUBLIC "-framework CoreText" "-framework CoreFoundation")
+endif()
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+    # PUBLIC: a static library, so whatever links fontsys_core needs it.
+    target_include_directories(fontsys_core PRIVATE ${Fontconfig_INCLUDE_DIRS})
+    target_link_libraries(fontsys_core PUBLIC ${Fontconfig_LIBRARIES})
 endif()
 if(MSVC)
     # Vendored FreeType is kept unmodified: silence its CRT deprecation and

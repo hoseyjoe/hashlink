@@ -150,6 +150,7 @@ jobs:
             sudo apt-get install --no-install-recommends -y \
               libmbedtls-dev${SUFFIX} \
               libopenal-dev${SUFFIX} \
+              libfontconfig1-dev${SUFFIX} \
               libpng-dev${SUFFIX} \
               libturbojpeg-dev${SUFFIX} \
               libuv1-dev${SUFFIX} \
