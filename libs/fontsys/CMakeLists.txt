@@ -56,6 +56,11 @@ target_compile_definitions(fontsys_core PRIVATE
     FT2_BUILD_LIBRARY
     "FT_CONFIG_MODULES_H=\"ftmodule.h\""
 )
+if(WIN32)
+    # PUBLIC: a static library, so whatever links fontsys_core needs it.
+    # fontsys_find_win.cpp's #pragma comment(lib) covers MSVC only, not MinGW.
+    target_link_libraries(fontsys_core PUBLIC dwrite)
+endif()
 if(APPLE)
     # PUBLIC: a static library, so whatever links fontsys_core needs them.
     target_link_libraries(fontsys_core PUBLIC "-framework CoreText" "-framework CoreFoundation")
