@@ -1,0 +1,8 @@
+# Run from the repository root: haxe libs/fontsys/test/native.hxml
+# Needs `haxelib dev hlfontsys libs/fontsys` and fontsys.hdll beside the hl on PATH.
+# CTest builds and runs the same test with this repository's own hl (fontsys.hl).
+-lib hlfontsys
+-cp libs/fontsys/test
+-main NativeTest
+-hl bin/fontsys/native.hl
+--cmd hl bin/fontsys/native.hl

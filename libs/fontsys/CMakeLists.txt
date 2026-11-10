@@ -80,6 +80,21 @@ if(MSVC)
     )
 endif()
 
+# HashLink bindings (fontsys_hl.c, the only file with HashLink types).
+add_library(fontsys.hdll fontsys_hl.c)
+set_as_hdll(fontsys)
+target_link_libraries(fontsys.hdll fontsys_core libhl)
+if(NOT MSVC AND NOT APPLE)
+    # Keep the vendored FreeType's FT_* symbols out of the .so's exports so
+    # they cannot clash with a system libfreetype loaded in the same process.
+    target_link_options(fontsys.hdll PRIVATE "-Wl,--exclude-libs,ALL")
+endif()
+install(
+    TARGETS
+        fontsys.hdll
+    DESTINATION ${HDLL_DESTINATION}
+)
+
 if(BUILD_TESTING)
     add_executable(fontsys_test test/fontsys_test.c)
     target_link_libraries(fontsys_test fontsys_core)

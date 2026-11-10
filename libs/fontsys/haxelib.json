@@ -1,0 +1,11 @@
+{
+	"name" : "hlfontsys",
+	"url" : "https://github.com/HaxeFoundation/hashlink/tree/master/libs/fontsys",
+	"license" : "BSD",
+	"contributors" : ["ncannasse"],
+	"description" : "System font lookup and SDF glyph rendering (FreeType) for Haxe/HL.",
+	"version" : "1.0.0",
+	"releasenote" : "",
+	"classPath" : ".",
+	"dependencies": {}
+}
