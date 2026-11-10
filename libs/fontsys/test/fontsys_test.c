@@ -1,6 +1,7 @@
 /* fontsys core tests (CTest: fontsys). Exit code 0 = all passed. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef _WIN32
 #   include <windows.h>
 #   include <wchar.h>
@@ -27,6 +28,8 @@ static int failures = 0;
 #define EM 32
 #define SPREAD 8
 #define NO_CP 0x10FFFD /* private use plane 16: no regular font covers it */
+#define CP_ZHONG 0x4E2D /* U+4E2D: Han, glyph form differs by language */
+#define PATH_CAP 1024
 
 static const char *test_font(void) {
     const char *env = getenv("FONTSYS_TEST_FONT");
@@ -145,6 +148,91 @@ static void test_render(fontsys_ctx *ctx, int face) {
     }
 }
 
+static int file_exists(const char *path) {
+#ifdef _WIN32
+    wchar_t wpath[4 * MAX_PATH];
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wpath, 4 * MAX_PATH)) return 0;
+    return GetFileAttributesW(wpath) != INVALID_FILE_ATTRIBUTES;
+#else
+    FILE *f = fopen(path, "rb");
+    if (f) fclose(f);
+    return f != NULL;
+#endif
+}
+
+/* fontsys_find, then check the result opens and covers cp. Returns the face id or -1. */
+static int find_face(fontsys_ctx *ctx, unsigned cp, const char *lang, int weight, int italic,
+                     int mono, char *path, int *index) {
+    fontsys_style style;
+    int r, face;
+
+    style.weight = weight;
+    style.italic = italic;
+    style.monospace = mono;
+    path[0] = 0;
+    *index = -1;
+    r = fontsys_find(ctx, cp, lang, &style, path, PATH_CAP, index);
+    printf("find(U+%04X, %s, w%d i%d m%d) = %d: %s #%d\n", cp, lang, weight, italic, mono, r,
+           path, *index);
+    CHECK(r == 1);
+    if (r != 1) return -1;
+    CHECK(file_exists(path));
+    CHECK(*index >= 0);
+    face = fontsys_face_open(ctx, path, *index);
+    CHECK(face >= 0);
+    if (face < 0) return -1;
+    CHECK(fontsys_face_has(ctx, face, cp) == 1);
+    return face;
+}
+
+static void test_find(void) {
+    fontsys_ctx *ctx = fontsys_create();
+    char hans[PATH_CAP], ja[PATH_CAP], path[PATH_CAP];
+    int hans_index = -1, ja_index = -1, index = -1, face, calls;
+    fontsys_style regular = {400, 0, 0};
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+
+    /* Han: the language picks the regional font */
+    find_face(ctx, CP_ZHONG, "zh-Hans", 400, 0, 0, hans, &hans_index);
+    find_face(ctx, CP_ZHONG, "ja", 400, 0, 0, ja, &ja_index);
+    CHECK(strcmp(hans, ja) != 0 || hans_index != ja_index);
+
+    /* Latin, and the style axes */
+    find_face(ctx, 'A', "en", 400, 0, 0, path, &index);
+    face = find_face(ctx, 'A', "en", 700, 0, 0, path, &index);
+    CHECK(face >= 0 && fontsys_face_is_bold(ctx, face) == 1);
+    face = find_face(ctx, 'A', "en", 400, 1, 0, path, &index);
+    CHECK(face >= 0 && fontsys_face_is_italic(ctx, face) == 1);
+    face = find_face(ctx, 'A', "en", 400, 0, 1, path, &index);
+    CHECK(face >= 0 && fontsys_face_is_mono(ctx, face) == 1);
+
+    /* nothing covers a private-use code point */
+    CHECK(fontsys_find(ctx, NO_CP, "en", &regular, path, PATH_CAP, &index) == 0);
+
+    /* surrogates and out-of-range code points are rejected before the OS is asked */
+    calls = fontsys_debug_os_calls(ctx);
+    CHECK(calls > 0);
+    CHECK(fontsys_find(ctx, 0xD83D, "en", &regular, path, PATH_CAP, &index) == 0);
+    CHECK(fontsys_find(ctx, 0xDFFF, "en", &regular, path, PATH_CAP, &index) == 0);
+    CHECK(fontsys_find(ctx, 0x110000, "en", &regular, path, PATH_CAP, &index) == 0);
+    CHECK(fontsys_debug_os_calls(ctx) == calls);
+
+    /* a path buffer too small: an error, and nothing written past path_cap */
+    {
+        char short_buf[16];
+        int i, untouched = 1;
+        memset(short_buf, 0x5A, sizeof(short_buf));
+        CHECK(fontsys_find(ctx, CP_ZHONG, "zh-Hans", &regular, short_buf, 4, &index) < 0);
+        for (i = 4; i < (int)sizeof(short_buf); i++)
+            if (short_buf[i] != 0x5A) untouched = 0;
+        CHECK(untouched);
+    }
+
+    fontsys_destroy(ctx);
+}
+
 int main(void) {
     const char *path = test_font();
     fontsys_ctx *ctx = fontsys_create();
@@ -165,6 +253,8 @@ int main(void) {
         fprintf(stderr, "cannot open test font '%s' (set FONTSYS_TEST_FONT)\n", path);
     }
     fontsys_destroy(ctx);
+
+    test_find();
 
     if (failures) {
         fprintf(stderr, "fontsys_test: %d check(s) failed\n", failures);

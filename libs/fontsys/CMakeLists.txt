@@ -22,13 +22,19 @@ set(FREETYPE_SOURCES
     ${FREETYPE_DIR}/src/gzip/ftgzip.c
 )
 
-# OS font lookup (fontsys_find); replaced per OS by later tasks.
-set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)
+# OS font lookup (fontsys_os_find, see fontsys_internal.h). The stub finds
+# nothing; per-OS lookups replace it.
+if(WIN32)
+    set(FONTSYS_FIND_SOURCES fontsys_find_win.cpp)   # DirectWrite
+else()
+    set(FONTSYS_FIND_SOURCES fontsys_find_stub.c)
+endif()
 
 # Everything except the HashLink bindings: no libhl dependency, so the
 # plain C test below can link it.
 add_library(fontsys_core STATIC
     fontsys.c
+    fontsys_internal.h
     ${FONTSYS_FIND_SOURCES}
     ${FREETYPE_SOURCES}
 )

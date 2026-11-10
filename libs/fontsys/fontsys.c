@@ -1,6 +1,7 @@
 /*
  * fontsys core: context, face cache, coverage check and SDF glyph rendering
- * with FreeType. The OS font lookup (fontsys_find) lives in fontsys_find_*.c.
+ * with FreeType, and the OS-neutral part of fontsys_find. The OS font lookup
+ * itself (fontsys_os_find) lives in fontsys_find_<os>.
  */
 #include <stddef.h>
 #include <stdio.h>
@@ -17,6 +18,7 @@
 #endif
 
 #include "fontsys.h"
+#include "fontsys_internal.h"
 
 #define FONTSYS_MAX_FACES 32
 
@@ -35,6 +37,7 @@ struct fontsys_ctx {
     fontsys_face_entry faces[FONTSYS_MAX_FACES];
     int face_count;
     int os_calls;   /* OS lookups made by fontsys_find (test hook) */
+    void *os_state; /* owned by fontsys_os_find, freed by fontsys_os_destroy */
 };
 
 fontsys_ctx *fontsys_create(void) {
@@ -55,11 +58,25 @@ void fontsys_destroy(fontsys_ctx *ctx) {
         free(ctx->faces[i].path);
     }
     FT_Done_FreeType(ctx->lib);
+    if (ctx->os_state) fontsys_os_destroy(ctx->os_state);
     free(ctx);
 }
 
 int fontsys_debug_os_calls(fontsys_ctx *ctx) {
     return ctx ? ctx->os_calls : 0;
+}
+
+void **fontsys_os_state(fontsys_ctx *ctx) {
+    return &ctx->os_state;
+}
+
+int fontsys_find(fontsys_ctx *ctx, unsigned cp, const char *lang, const fontsys_style *style,
+                 char *path_out, int path_cap, int *index_out) {
+    if (!ctx || !lang || !style || !path_out || path_cap <= 0 || !index_out) return -1;
+    /* Not Unicode scalar values: no font maps them, so never ask the OS. */
+    if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) return 0;
+    ctx->os_calls++;
+    return fontsys_os_find(ctx, cp, lang, style, path_out, path_cap, index_out);
 }
 
 #ifdef _WIN32
