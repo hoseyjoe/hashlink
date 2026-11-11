@@ -365,6 +365,35 @@ static void test_color_emoji(void) {
     fontsys_destroy(ctx);
 }
 
+/* fontsys_file_instance (private, used by the Android lookup): a variable
+   font's axis settings name one of its instances; bold and italic of a
+   variable face are read from its coordinates. */
+static void test_variable_instances(void) {
+#ifdef _WIN32
+    static const fontsys_axis bold[] = {{FONTSYS_AXIS_TAG('w', 'g', 'h', 't'), 700.0f},
+                                        {FONTSYS_AXIS_TAG('w', 'd', 't', 'h'), 100.0f}};
+    static const fontsys_axis semibold[] = {{FONTSYS_AXIS_TAG('w', 'g', 'h', 't'), 600.0f}};
+    static const fontsys_axis regular[] = {{FONTSYS_AXIS_TAG('w', 'g', 'h', 't'), 400.0f}};
+    const char *bahn = "C:/Windows/Fonts/bahnschrift.ttf", *arial = "C:/Windows/Fonts/arial.ttf";
+    fontsys_ctx *ctx = fontsys_create();
+    int face;
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+    /* Bahnschrift: wght 300-700, wdth 75-100; instance 5 is Bold, 4 SemiBold */
+    CHECK(fontsys_file_instance(ctx, bahn, 0, bold, 2) == 0x50000);
+    CHECK(fontsys_file_instance(ctx, bahn, 0, semibold, 1) == 0x40000); /* wdth at its default */
+    CHECK(fontsys_file_instance(ctx, bahn, 0, NULL, 0) == 0);           /* no axes: the face as is */
+    CHECK(fontsys_file_instance(ctx, arial, 0, bold, 2) == 0);          /* not variable */
+    face = fontsys_face_open(ctx, bahn, fontsys_file_instance(ctx, bahn, 0, bold, 2));
+    CHECK(face >= 0 && fontsys_face_is_bold(ctx, face) == 1);
+    face = fontsys_face_open(ctx, bahn, fontsys_file_instance(ctx, bahn, 0, regular, 1));
+    CHECK(face >= 0 && fontsys_face_is_bold(ctx, face) == 0);
+    CHECK(fontsys_debug_os_calls(ctx) == 0);
+    fontsys_destroy(ctx);
+#endif
+}
+
 /* HarfBuzz is compiled into fontsys_core. */
 static void test_harfbuzz_linked(void) {
     unsigned major = 0, minor = 0, micro = 0;
@@ -582,6 +611,7 @@ int main(void) {
     test_render_emoji();
     test_harfbuzz_linked();
     test_color_emoji();
+    test_variable_instances();
     test_find();
 
     if (failures) {

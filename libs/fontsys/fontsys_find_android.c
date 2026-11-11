@@ -13,6 +13,12 @@
  *
  * Either way the font must really map the code point (FreeType cmap check).
  *
+ * Variable fonts: Android draws Roboto's bold and italic from the one variable
+ * Roboto-Regular.ttf at axis settings (wght 700, ital 1), reported by
+ * AFont_getAxis* or by fonts.xml's <axis> children. Those settings become the
+ * named instance that matches them, face (instance << 16) | index, so the
+ * glyphs come out bold or italic (fontsys_file_instance).
+ *
  * An empty lang means the device's language: the system property
  * persist.sys.locale (set when the user picks a language), else
  * ro.product.locale (the factory default), else "en". Android 13+ per-app
@@ -51,6 +57,9 @@ typedef void *(*matcher_match_fn)(const void *matcher, const char *family_name,
 typedef const char *(*font_get_path_fn)(const void *font);
 typedef size_t (*font_get_index_fn)(const void *font);
 typedef void (*font_close_fn)(void *font);
+typedef size_t (*font_get_axis_count_fn)(const void *font);
+typedef uint32_t (*font_get_axis_tag_fn)(const void *font, uint32_t axis_index);
+typedef float (*font_get_axis_value_fn)(const void *font, uint32_t axis_index);
 
 typedef struct {
     void *libandroid; /* dlopen handle; NULL when the matcher is not used */
@@ -62,6 +71,10 @@ typedef struct {
     font_get_path_fn font_get_path;
     font_get_index_fn font_get_index;
     font_close_fn font_close;
+    /* optional: without them a variable font is drawn at its default instance */
+    font_get_axis_count_fn font_get_axis_count;
+    font_get_axis_tag_fn font_get_axis_tag;
+    font_get_axis_value_fn font_get_axis_value;
 
     int xml_loaded;        /* fonts.xml parsed into xml (retried while it fails) */
     fontsys_xml_table xml;
@@ -93,6 +106,10 @@ static void load_matcher(android_state *st) {
         load_sym(lib, "AFont_getCollectionIndex", &st->font_get_index) &&
         load_sym(lib, "AFont_close", &st->font_close)) {
         st->libandroid = lib;
+        if (!load_sym(lib, "AFont_getAxisCount", &st->font_get_axis_count) ||
+            !load_sym(lib, "AFont_getAxisTag", &st->font_get_axis_tag) ||
+            !load_sym(lib, "AFont_getAxisValue", &st->font_get_axis_value))
+            st->font_get_axis_count = NULL;
         __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "font lookup: AFontMatcher");
         return;
     }
@@ -132,7 +149,8 @@ static int find_with_matcher(android_state *st, fontsys_ctx *ctx, unsigned cp, c
     uint32_t len = 1;
     void *matcher, *font;
     const char *path;
-    int index, face, covered, r;
+    int index, face, covered, r, n = 0;
+    fontsys_axis axes[FONTSYS_XML_MAX_AXES];
 
     if (cp >= 0x10000) {
         text[0] = (uint16_t)(0xD800 + ((cp - 0x10000) >> 10));
@@ -156,6 +174,14 @@ static int find_with_matcher(android_state *st, fontsys_ctx *ctx, unsigned cp, c
     if (!path || !*path || index < 0) {
         r = -1;
     } else {
+        if (st->font_get_axis_count) {
+            size_t count = st->font_get_axis_count(font), i;
+            for (i = 0; i < count && n < FONTSYS_XML_MAX_AXES; i++, n++) {
+                axes[n].tag = st->font_get_axis_tag(font, (uint32_t)i);
+                axes[n].value = st->font_get_axis_value(font, (uint32_t)i);
+            }
+        }
+        index = fontsys_file_instance(ctx, path, index, axes, n);
         /* The caller opens the same face next, so this cache entry is reused. */
         face = fontsys_face_open(ctx, path, index);
         covered = face >= 0 ? fontsys_face_has(ctx, face, cp)
@@ -175,6 +201,7 @@ static int xml_covers(void *user, const fontsys_xml_font *font, unsigned cp) {
 static int find_with_fonts_xml(android_state *st, fontsys_ctx *ctx, unsigned cp, const char *lang,
                                const fontsys_style *style, char *path_out, int path_cap,
                                int *index_out) {
+    const fontsys_xml_font *font;
     int i;
 
     if (!st->xml_loaded) {
@@ -183,7 +210,9 @@ static int find_with_fonts_xml(android_state *st, fontsys_ctx *ctx, unsigned cp,
     }
     i = fontsys_xml_select(&st->xml, cp, lang, style, xml_covers, ctx);
     if (i < 0) return 0;
-    return put_result(st->xml.fonts[i].path, st->xml.fonts[i].index, path_out, path_cap, index_out);
+    font = &st->xml.fonts[i];
+    return put_result(font->path, fontsys_file_instance(ctx, font->path, font->index, font->axes, font->axis_count),
+                      path_out, path_cap, index_out);
 }
 
 /* The device's language as a BCP 47 tag ("zh-CN", "ja-JP"), for an empty lang.

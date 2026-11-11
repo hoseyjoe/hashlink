@@ -145,6 +145,50 @@ static int attr_int(const xml_tag *tag, const char *name, int def) {
     return (int)n;
 }
 
+/* A decimal number ("700", "-12.5", "87.5") in *out: 1, else 0. Not strtod,
+   whose decimal point follows the C locale. */
+static int parse_number(xml_str v, float *out) {
+    size_t i = 0;
+    double n = 0, scale = 1;
+    int neg = 0, digits = 0, frac = 0;
+    if (!v.s || v.len == 0) return 0;
+    if (v.s[0] == '-' || v.s[0] == '+') {
+        neg = v.s[0] == '-';
+        i++;
+    }
+    for (; i < v.len; i++) {
+        char ch = v.s[i];
+        if (ch == '.' && !frac) {
+            frac = 1;
+        } else if (ch >= '0' && ch <= '9') {
+            if (frac) {
+                scale /= 10;
+                n += (ch - '0') * scale;
+            } else {
+                n = n * 10 + (ch - '0');
+            }
+            digits++;
+        } else {
+            return 0;
+        }
+    }
+    if (!digits) return 0;
+    *out = (float)(neg ? -n : n);
+    return 1;
+}
+
+/* <axis tag="wght" stylevalue="700"/> of the font being read: appended to its axes. */
+static void add_axis(fontsys_xml_font *f, const xml_tag *tag) {
+    xml_str t = attr(tag, "tag");
+    float value;
+    if (f->axis_count >= FONTSYS_XML_MAX_AXES || t.len != 4) return;
+    if (!parse_number(attr(tag, "stylevalue"), &value)) return;
+    f->axes[f->axis_count].tag = FONTSYS_AXIS_TAG((unsigned char)t.s[0], (unsigned char)t.s[1],
+                                                  (unsigned char)t.s[2], (unsigned char)t.s[3]);
+    f->axes[f->axis_count].value = value;
+    f->axis_count++;
+}
+
 static char *dup_concat(const char *a, const char *b, size_t blen) {
     size_t alen = a ? strlen(a) : 0;
     char *r = (char *)malloc(alen + blen + 1);
@@ -201,6 +245,7 @@ static int add_font(fontsys_xml_table *t, int *cap, const xml_tag *tag, int fami
     f->index = attr_int(tag, "index", 0);
     f->serif_fallback = attr(tag, "fallbackFor").len > 0;
     f->family = family;
+    f->axis_count = 0;
     t->font_count++;
     t->families[family].font_count++;
     return 0;
@@ -233,6 +278,7 @@ static xml_str font_file(xml_cursor *c) {
 int fontsys_xml_parse(const char *xml, size_t len, const char *font_dir, fontsys_xml_table *out) {
     xml_cursor c;
     int family_cap = 0, font_cap = 0, family = -1;
+    int font = -1; /* the <font> whose <axis> children are being read */
 
     memset(out, 0, sizeof(*out));
     if (!xml) return 0;
@@ -253,7 +299,8 @@ int fontsys_xml_parse(const char *xml, size_t len, const char *font_dir, fontsys
             continue;
         }
         if (at(&c, "<!") || at(&c, "</")) {
-            if (at(&c, "</family")) family = -1;
+            if (at(&c, "</family")) family = font = -1;
+            if (at(&c, "</font")) font = -1;
             skip_past(&c, ">");
             continue;
         }
@@ -265,7 +312,13 @@ int fontsys_xml_parse(const char *xml, size_t len, const char *font_dir, fontsys
             family = tag.self_closing ? -1 : out->family_count - 1;
         } else if (str_is(tag.name, "font") && family >= 0 && !tag.self_closing) {
             xml_str file = font_file(&c);
-            if (file.len && add_font(out, &font_cap, &tag, family, font_dir, file) < 0) goto oom;
+            font = -1;
+            if (file.len) {
+                if (add_font(out, &font_cap, &tag, family, font_dir, file) < 0) goto oom;
+                font = out->font_count - 1;
+            }
+        } else if (str_is(tag.name, "axis") && font >= 0) {
+            add_axis(&out->fonts[font], &tag);
         }
     }
     return 0;

@@ -10,10 +10,14 @@
 #include <stddef.h>
 
 #include "fontsys.h"
+#include "fontsys_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* <axis> children kept per <font>; more are ignored (Android uses wght, ital, wdth). */
+#define FONTSYS_XML_MAX_AXES 8
 
 typedef struct {
     char *name;     /* name attribute ("sans-serif"), "" when none */
@@ -29,6 +33,8 @@ typedef struct {
     int index;          /* index attribute (face in a .ttc), default 0 */
     int serif_fallback; /* has a fallbackFor attribute (the serif form of a CJK family) */
     int family;         /* index in families */
+    int axis_count;     /* <axis tag stylevalue> children: the variable font's settings */
+    fontsys_axis axes[FONTSYS_XML_MAX_AXES];
 } fontsys_xml_font;
 
 typedef struct {
@@ -39,8 +45,8 @@ typedef struct {
 } fontsys_xml_table;
 
 /* Parses len bytes of fonts.xml into *out (zeroed first). Every <font> inside
-   a <family> becomes an entry; <alias>, <axis>, comments and unknown elements
-   are skipped. Returns 0, or -1 when out of memory (*out is then empty). */
+   a <family> becomes an entry, with its <axis> children; <alias>, comments and
+   unknown elements are skipped. Returns 0, or -1 when out of memory (*out is then empty). */
 int fontsys_xml_parse(const char *xml, size_t len, const char *font_dir, fontsys_xml_table *out);
 
 /* Reads the file at path and parses it. 0, or -1 when it cannot be read. */

@@ -112,6 +112,16 @@ static void test_parse(const fontsys_xml_table *tp) {
     FONT(EMOJI, DIR "NotoColorEmoji.ttf", 400, 0, 0, 0, 12);
     FONT(EXTRA, "/product/fonts/Extra.ttf", 400, 0, 0, 0, 13);           /* absolute path kept */
 
+    /* <axis> children: a variable font's settings for this weight and slant, in order */
+    CHECK(t.fonts[ROBOTO_REGULAR].axis_count == 0);
+    CHECK(t.fonts[FLEX].axis_count == 2);
+    CHECK(t.fonts[FLEX].axes[0].tag == FONTSYS_AXIS_TAG('w', 'g', 'h', 't') && t.fonts[FLEX].axes[0].value == 300.0f);
+    CHECK(t.fonts[FLEX].axes[1].tag == FONTSYS_AXIS_TAG('w', 'd', 't', 'h') && t.fonts[FLEX].axes[1].value == 87.5f);
+    CHECK(t.fonts[FLEX_ITALIC].axis_count == 1);
+    CHECK(t.fonts[FLEX_BOLD_ITALIC].axis_count == 2);
+    CHECK(t.fonts[FLEX_BOLD_ITALIC].axes[1].tag == FONTSYS_AXIS_TAG('i', 't', 'a', 'l') &&
+          t.fonts[FLEX_BOLD_ITALIC].axes[1].value == 1.0f);
+
     /* the commented-out family and the alias targets are not fonts */
     for (i = 0; i < t.font_count; i++) {
         CHECK(strstr(t.fonts[i].path, "Ghost") == NULL);

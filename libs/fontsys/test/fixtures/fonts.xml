@@ -41,12 +41,14 @@
     <family name='sans-serif-flex'>
         <font weight='300' style='normal'>RobotoFlex-Regular.ttf
             <axis tag="wght" stylevalue="300" />
+            <axis tag='wdth' stylevalue='87.5'/>
         </font>
         <font weight='300' style='italic'>RobotoFlex-Italic.ttf
             <axis tag="wght" stylevalue="300" />
         </font>
         <font weight='700' style='italic'>RobotoFlex-Italic.ttf
             <axis tag="wght" stylevalue="700" />
+            <axis tag="ital" stylevalue="1" />
         </font>
     </family>
 

@@ -38,6 +38,24 @@ void **fontsys_os_state(fontsys_ctx *ctx);
    opened only for the comparison: none enter the face cache. */
 int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_name, unsigned cp);
 
+/* A variable font axis setting: tag as in OpenType ('wght' is
+   FONTSYS_AXIS_TAG('w','g','h','t')), value in the axis's design units. */
+#define FONTSYS_AXIS_TAG(a, b, c, d) \
+    (((unsigned)(a) << 24) | ((unsigned)(b) << 16) | ((unsigned)(c) << 8) | (unsigned)(d))
+typedef struct {
+    unsigned tag;
+    float value;
+} fontsys_axis;
+
+/* The face of the font file at path (UTF-8) for the axis settings axes[0..n):
+   for a variable font, (instance << 16) | index of the named instance whose
+   coordinates match them (axes not given at their defaults), else the
+   nearest one; index itself when n is 0, the font is not variable or cannot
+   be opened. For OS lookups that report a variable font file plus axis
+   values (Android). The face is opened only for this: it does not enter the
+   face cache. */
+int fontsys_file_instance(fontsys_ctx *ctx, const char *path, int index, const fontsys_axis *axes, int n);
+
 /* 1 when face index of the font file at path (UTF-8) maps cp, else 0 (also
    when it cannot be opened). Answered from the face cache when the face is
    there; otherwise the face is opened only for the check and does not enter

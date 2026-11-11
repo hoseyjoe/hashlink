@@ -11,6 +11,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_MODULE_H
+#include FT_MULTIPLE_MASTERS_H
 #include <hb.h>
 
 #ifdef _WIN32
@@ -201,6 +202,57 @@ int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_n
     return first_covering;
 }
 
+/* How far coords (16.16, one per axis of mm) are from the settings axes[0..n),
+   axes not given wanting their default: the sum of |want - have| / range. */
+static double axis_distance(const FT_MM_Var *mm, const FT_Fixed *coords, const fontsys_axis *axes, int n) {
+    double d = 0;
+    FT_UInt a;
+    int k;
+
+    for (a = 0; a < mm->num_axis; a++) {
+        const FT_Var_Axis *ax = &mm->axis[a];
+        double want = ax->def / 65536.0, have = coords[a] / 65536.0;
+        double range = (ax->maximum - ax->minimum) / 65536.0, diff;
+        for (k = 0; k < n; k++)
+            if (axes[k].tag == (unsigned)ax->tag) want = axes[k].value;
+        diff = want > have ? want - have : have - want;
+        if (range > 0) d += diff / range;
+    }
+    return d;
+}
+
+int fontsys_file_instance(fontsys_ctx *ctx, const char *path, int index, const fontsys_axis *axes, int n) {
+    FT_Face face = NULL;
+    FT_MM_Var *mm = NULL;
+    FT_Fixed *defaults;
+    FT_UInt a, j;
+    int base = index & 0xFFFF, best = index;
+    double best_d;
+
+    if (!ctx || !path || index < 0 || !axes || n <= 0) return index;
+    if (open_ft_face(ctx->lib, path, base, &face) != 0) return index;
+    if (FT_HAS_MULTIPLE_MASTERS(face) && FT_Get_MM_Var(face, &mm) == 0) {
+        defaults = (FT_Fixed *)malloc(sizeof(FT_Fixed) * (mm->num_axis ? mm->num_axis : 1));
+        if (defaults) {
+            /* the default instance is face base itself: kept unless an instance is nearer */
+            for (a = 0; a < mm->num_axis; a++) defaults[a] = mm->axis[a].def;
+            best = base;
+            best_d = axis_distance(mm, defaults, axes, n);
+            for (j = 0; j < mm->num_namedstyles && j < 0x7FFF; j++) {
+                double d = axis_distance(mm, mm->namedstyle[j].coords, axes, n);
+                if (d < best_d) {
+                    best_d = d;
+                    best = (int)(((j + 1) << 16) | (FT_UInt)base);
+                }
+            }
+            free(defaults);
+        }
+        FT_Done_MM_Var(ctx->lib, mm);
+    }
+    FT_Done_Face(face);
+    return best;
+}
+
 int fontsys_file_has(fontsys_ctx *ctx, const char *path, int index, unsigned cp) {
     FT_Face face = NULL;
     int i, has;
@@ -267,14 +319,45 @@ int fontsys_face_has(fontsys_ctx *ctx, int face, unsigned cp) {
     return FT_Get_Char_Index(f, cp) != 0;
 }
 
+/* The current design coordinate of a variable face's axis tag in *out: 1, or 0
+   when the face is not variable or has no such axis. A named instance's
+   style flags are its font's header (the default instance), so its weight
+   and slant are read from here instead. */
+static int var_coord(fontsys_ctx *ctx, FT_Face f, FT_ULong tag, double *out) {
+    FT_MM_Var *mm = NULL;
+    FT_Fixed *coords;
+    FT_UInt a;
+    int found = 0;
+
+    if (!FT_HAS_MULTIPLE_MASTERS(f) || FT_Get_MM_Var(f, &mm) != 0) return 0;
+    coords = (FT_Fixed *)malloc(sizeof(FT_Fixed) * (mm->num_axis ? mm->num_axis : 1));
+    if (coords && FT_Get_Var_Design_Coordinates(f, mm->num_axis, coords) == 0) {
+        for (a = 0; a < mm->num_axis && !found; a++) {
+            if (mm->axis[a].tag != tag) continue;
+            *out = coords[a] / 65536.0;
+            found = 1;
+        }
+    }
+    free(coords);
+    FT_Done_MM_Var(ctx->lib, mm);
+    return found;
+}
+
 int fontsys_face_is_bold(fontsys_ctx *ctx, int face) {
     FT_Face f = get_face(ctx, face);
-    return f && (f->style_flags & FT_STYLE_FLAG_BOLD) != 0;
+    double wght;
+    if (!f) return 0;
+    if (var_coord(ctx, f, FT_MAKE_TAG('w', 'g', 'h', 't'), &wght)) return wght >= 600;
+    return (f->style_flags & FT_STYLE_FLAG_BOLD) != 0;
 }
 
 int fontsys_face_is_italic(fontsys_ctx *ctx, int face) {
     FT_Face f = get_face(ctx, face);
-    return f && (f->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+    double v;
+    if (!f) return 0;
+    if (var_coord(ctx, f, FT_MAKE_TAG('i', 't', 'a', 'l'), &v)) return v >= 0.5;
+    if (var_coord(ctx, f, FT_MAKE_TAG('s', 'l', 'n', 't'), &v) && v != 0) return 1;
+    return (f->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
 }
 
 int fontsys_face_is_mono(fontsys_ctx *ctx, int face) {
