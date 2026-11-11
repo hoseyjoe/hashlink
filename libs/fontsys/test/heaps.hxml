@@ -1,0 +1,10 @@
+# FallbackAtlas test: opens a real SDL window / GPU context via hxd.App.
+# Run from the repository root (needs `haxelib dev hlfontsys libs/fontsys`):
+#   haxe libs/fontsys/test/heaps.hxml && C:/SDKs/hashlink/hl.exe bin/fontsys-heaps-test.hl
+# (bin/ is git-ignored; the "hl" on PATH works too if it has sdl.hdll and fontsys.hdll.)
+-lib heaps
+-lib hlsdl
+-lib hlfontsys
+-cp libs/fontsys/test
+-main HeapsTest
+-hl bin/fontsys-heaps-test.hl
