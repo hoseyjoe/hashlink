@@ -43,6 +43,11 @@ class SystemGlyphSource implements GlyphSource {
 		if (face == null) {
 			face = sys.openFace(found.path, found.index);
 			faces.set(faceKey, face);
+			// Cached, so this logs once per (path, index). -2: the face cache is full
+			// (FontSys keeps at most 32 faces), so no new font file resolves from now on.
+			if (face < 0)
+				trace("fontsys: openFace(" + found.path + " #" + found.index + ") failed: " + face
+					+ (face == -2 ? " (face cache full)" : ""));
 		}
 		if (face < 0)
 			return null;
