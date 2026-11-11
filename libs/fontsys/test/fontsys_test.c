@@ -8,6 +8,7 @@
 #endif
 #include "fontsys.h"
 #include "fontsys_internal.h"
+#include <hb.h>
 
 static int failures = 0;
 
@@ -230,6 +231,13 @@ static void test_render_emoji(void) {
     fontsys_destroy(ctx);
 }
 
+/* HarfBuzz is compiled into fontsys_core. */
+static void test_harfbuzz_linked(void) {
+    unsigned major = 0, minor = 0, micro = 0;
+    hb_version(&major, &minor, &micro);
+    CHECK(major >= 8);
+}
+
 /* fontsys_file_face_index (private, used by the Apple lookup): the face of a
    font file named by PostScript name, else the first face that maps cp. */
 static void test_file_face_index(const char *path) {
@@ -438,6 +446,7 @@ int main(void) {
     test_render_overlaps();
 #endif
     test_render_emoji();
+    test_harfbuzz_linked();
     test_find();
 
     if (failures) {

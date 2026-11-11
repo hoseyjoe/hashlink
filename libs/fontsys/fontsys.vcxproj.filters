@@ -4,6 +4,9 @@
     <Filter Include="freetype">
       <UniqueIdentifier>{3E6B1A1C-5F0D-4D57-9C0B-7A4F2D9E8B11}</UniqueIdentifier>
     </Filter>
+    <Filter Include="harfbuzz">
+      <UniqueIdentifier>{8C1F4E2A-6B3D-4F7E-A915-2D0C7B5E9A34}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="fontsys.c" />
@@ -59,6 +62,9 @@
     </ClCompile>
     <ClCompile Include="..\..\include\freetype\src\gzip\ftgzip.c">
       <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\harfbuzz\src\harfbuzz.cc">
+      <Filter>harfbuzz</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

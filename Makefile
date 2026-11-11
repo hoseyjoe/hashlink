@@ -135,8 +135,18 @@ FONTSYS_FT = include/freetype/src/base/ftsystem.o include/freetype/src/base/ftin
 	include/freetype/src/pshinter/pshinter.o include/freetype/src/smooth/smooth.o \
 	include/freetype/src/sdf/sdf.o include/freetype/src/autofit/autofit.o \
 	include/freetype/src/gzip/ftgzip.o
+# HarfBuzz (vendored, include/harfbuzz/README-hashlink.md): the amalgamation
+# with hb-ft, in the same archive so its symbols stay hidden too.
+FONTSYS_FT += include/harfbuzz/src/harfbuzz.o
 FONTSYS_FT_LIB = libs/fontsys/libfontsys_freetype.a
-FONTSYS_CPPFLAGS = -I libs/fontsys -I include/freetype/include -D FT2_BUILD_LIBRARY -D FT_CONFIG_MODULES_H=\"ftmodule.h\"
+FONTSYS_CPPFLAGS = -I libs/fontsys -I include/freetype/include -I include/harfbuzz/src -D FT2_BUILD_LIBRARY -D FT_CONFIG_MODULES_H=\"ftmodule.h\"
+# libpng (include/png) lets FreeType decode sbix/CBDT colour emoji bitmaps.
+# Added off Windows only (Segoe UI Emoji is COLR; fmt has libpng there).
+FONTSYS_PNG = include/png/png.o include/png/pngerror.o include/png/pngget.o \
+	include/png/pngmem.o include/png/pngpread.o include/png/pngread.o \
+	include/png/pngrio.o include/png/pngrtran.o include/png/pngrutil.o \
+	include/png/pngset.o include/png/pngtrans.o
+FONTSYS_PNG_CPPFLAGS = -I include/png -D FT_CONFIG_OPTION_USE_PNG
 
 LIB = ${PCRE} ${RUNTIME} ${STD}
 
@@ -208,7 +218,9 @@ openal_LDFLAGS = -L$(BREW_OPENAL_PREFIX)/lib
 openal_LDLIBS = -lopenal
 ssl_LDLIBS += -framework Security -framework CoreFoundation
 FONTSYS += libs/fontsys/fontsys_find_apple.o
-fontsys_LDLIBS = -framework CoreText -framework CoreFoundation
+FONTSYS_FT += $(FONTSYS_PNG)
+FONTSYS_CPPFLAGS += $(FONTSYS_PNG_CPPFLAGS)
+fontsys_LDLIBS = -framework CoreText -framework CoreFoundation -lz
 RELEASE_NAME = osx
 
 # Mac native debug
@@ -247,8 +259,10 @@ sdl_LDFLAGS = $(shell pkg-config --libs-only-L --libs-only-other sdl3)
 sdl_LDLIBS = $(shell pkg-config --libs-only-l sdl3) -lGL
 openal_LDLIBS = -lopenal
 FONTSYS += libs/fontsys/fontsys_find_linux.o
+FONTSYS_FT += $(FONTSYS_PNG)
+FONTSYS_CPPFLAGS += $(FONTSYS_PNG_CPPFLAGS)
 fontsys_LDFLAGS = -Wl,--exclude-libs,ALL
-fontsys_LDLIBS = -lfontconfig
+fontsys_LDLIBS = -lfontconfig -lz
 RELEASE_NAME = linux
 
 endif
@@ -344,9 +358,12 @@ heaps.hdll: $(HEAPS) $(LIBHL)
 $(FONTSYS) $(FONTSYS_FT): CPPFLAGS += $(FONTSYS_CPPFLAGS)
 $(FONTSYS_FT_LIB): $(FONTSYS_FT)
 	$(AR) rcs $@ $^
-ifeq ($(OS),Windows_NT)
+# .SUFFIXES below has no .cc: an explicit rule for the HarfBuzz amalgamation.
+include/harfbuzz/src/harfbuzz.o: include/harfbuzz/src/harfbuzz.cc
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -D HAVE_FREETYPE=1 -Os -fno-exceptions -fno-rtti -fvisibility=hidden -fvisibility-inlines-hidden -c $< -o $@
+$(FONTSYS_PNG): CFLAGS += -fvisibility=hidden
+# HarfBuzz is C++.
 fontsys.hdll: HDLL_LINK = $(CXX) $(LDFLAGS)
-endif
 fontsys.hdll: $(FONTSYS) $(FONTSYS_FT_LIB) $(LIBHL)
 
 mesa:

@@ -22,6 +22,33 @@ set(FREETYPE_SOURCES
     ${FREETYPE_DIR}/src/gzip/ftgzip.c
 )
 
+# HarfBuzz (vendored, see include/harfbuzz/README-hashlink.md): the single-file
+# amalgamation, with its FreeType glue (hb-ft) on. Joins emoji sequences into
+# one glyph (fontsys_shape_cluster).
+set(HARFBUZZ_DIR ${INCLUDES_BASE_DIR}/harfbuzz)
+set(HARFBUZZ_SOURCES ${HARFBUZZ_DIR}/src/harfbuzz.cc)
+
+# libpng (vendored in include/png) lets FreeType decode the PNG colour bitmaps
+# of sbix/CBDT emoji fonts (Android's Noto Color Emoji, Apple Color Emoji).
+# Not on Windows: Segoe UI Emoji is COLR layers, which need no PNG, and fmt.hdll
+# already compiles libpng there (a static exe links both).
+if(NOT WIN32)
+    set(PNG_DIR ${INCLUDES_BASE_DIR}/png)
+    set(FONTSYS_PNG_SOURCES
+        ${PNG_DIR}/png.c
+        ${PNG_DIR}/pngerror.c
+        ${PNG_DIR}/pngget.c
+        ${PNG_DIR}/pngmem.c
+        ${PNG_DIR}/pngpread.c
+        ${PNG_DIR}/pngread.c
+        ${PNG_DIR}/pngrio.c
+        ${PNG_DIR}/pngrtran.c
+        ${PNG_DIR}/pngrutil.c
+        ${PNG_DIR}/pngset.c
+        ${PNG_DIR}/pngtrans.c
+    )
+endif()
+
 # OS font lookup (fontsys_os_find, see fontsys_internal.h). The stub finds
 # nothing; per-OS lookups replace it.
 if(WIN32)
@@ -45,6 +72,8 @@ add_library(fontsys_core STATIC
     fontsys_internal.h
     ${FONTSYS_FIND_SOURCES}
     ${FREETYPE_SOURCES}
+    ${HARFBUZZ_SOURCES}
+    ${FONTSYS_PNG_SOURCES}
 )
 set_target_properties(fontsys_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # ftmodule.h must be found before anything else of that name.
@@ -52,6 +81,19 @@ target_include_directories(fontsys_core BEFORE
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${FREETYPE_DIR}/include
 )
+# PUBLIC: the tests call HarfBuzz (hb_version) to check it is linked.
+target_include_directories(fontsys_core PUBLIC ${HARFBUZZ_DIR}/src)
+set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES COMPILE_DEFINITIONS HAVE_FREETYPE=1)
+if(NOT WIN32)
+    target_include_directories(fontsys_core PRIVATE ${PNG_DIR})
+    target_compile_definitions(fontsys_core PRIVATE FT_CONFIG_OPTION_USE_PNG)
+    if(ANDROID OR APPLE)
+        target_link_libraries(fontsys_core PUBLIC z)
+    else()
+        find_package(ZLIB REQUIRED)
+        target_link_libraries(fontsys_core PUBLIC ZLIB::ZLIB)
+    endif()
+endif()
 target_compile_definitions(fontsys_core PRIVATE
     FT2_BUILD_LIBRARY
     "FT_CONFIG_MODULES_H=\"ftmodule.h\""
@@ -82,6 +124,19 @@ if(MSVC)
     set_source_files_properties(${FREETYPE_SOURCES} PROPERTIES
         COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS
         COMPILE_OPTIONS "/wd4244;/wd4267"
+    )
+    # HarfBuzz, also unmodified: too many sections for the default object format.
+    set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "/bigobj;/wd4244;/wd4267;/wd4146"
+    )
+else()
+    # HarfBuzz is built without exceptions or RTTI and its symbols stay
+    # internal; libpng's too (the .so also drops them with --exclude-libs).
+    set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-Os;-fno-exceptions;-fno-rtti;-fvisibility=hidden;-fvisibility-inlines-hidden"
+    )
+    set_source_files_properties(${FONTSYS_PNG_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-fvisibility=hidden"
     )
 endif()
 
