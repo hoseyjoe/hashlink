@@ -50,6 +50,25 @@ int fontsys_render_sdf(fontsys_ctx *ctx, int face, unsigned cp, int em_px, int s
 int fontsys_face_is_bold(fontsys_ctx *ctx, int face);
 int fontsys_face_is_italic(fontsys_ctx *ctx, int face);
 int fontsys_face_is_mono(fontsys_ctx *ctx, int face);
+
+/* Colour emoji. 1 when the face has colour glyph data (COLR layers or
+   colour bitmap strikes: sbix, CBDT), else 0. */
+int fontsys_face_is_color(fontsys_ctx *ctx, int face);
+/* Shapes the code points cps[0..n) with HarfBuzz (left to right, script and
+   language guessed). 1 when they shape to exactly one glyph that is not
+   .notdef (*glyph_out set to its glyph id): an emoji sequence the font
+   joins (skin tone, ZWJ family, flag, keycap). 0 otherwise, <0 on error. */
+int fontsys_shape_cluster(fontsys_ctx *ctx, int face, const unsigned *cps, int n,
+                          unsigned *glyph_out);
+/* Renders glyph (a glyph id, from fontsys_shape_cluster) in colour with one
+   em = em_px pixels. 1 ok: buf receives width*height*4 bytes, RGBA with
+   straight (not premultiplied) alpha, rows top to bottom. 0 the glyph has
+   no colour image (outline only, COLRv1 only, or a PNG strike in a build
+   without PNG). -1 buf too small (out->width/height set). <0 other errors.
+   out->left/top/advance are in pixels at em_px; bitmap strikes are scaled
+   to em_px. */
+int fontsys_render_color(fontsys_ctx *ctx, int face, unsigned glyph, int em_px,
+                         unsigned char *buf, int buf_cap, fontsys_glyph *out);
 /* Number of OS lookup calls made by fontsys_find so far (test hook). */
 int fontsys_debug_os_calls(fontsys_ctx *ctx);
 

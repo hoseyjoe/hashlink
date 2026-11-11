@@ -22,7 +22,9 @@ Everything else (meson/CMake build files, generator scripts, `.rl` sources, `src
 ## How it is built
 
 Only the amalgamation `src/harfbuzz.cc` is compiled, with `HAVE_FREETYPE=1` so `hb-ft`
-uses the vendored FreeType (`include/freetype`): `libs/fontsys/CMakeLists.txt`,
+uses the vendored FreeType (`include/freetype`), and `HB_LEAN` (HarfBuzz's own size
+switch, `src/hb-config.hh`: no serialization, glyph names, math, vertical, variations;
+shaping, GSUB and AAT stay), which takes about 340 KB off `fontsys.hdll`: `libs/fontsys/CMakeLists.txt`,
 `Makefile` and `libs/fontsys/fontsys.vcxproj`. MSVC needs `/bigobj`. Elsewhere it is built
 `-Os -fno-exceptions -fno-rtti -fvisibility=hidden`, and `fontsys.hdll` links it with
 `--exclude-libs,ALL` (not Apple) so no `hb_*` symbol is exported. `hb-features.h` is not

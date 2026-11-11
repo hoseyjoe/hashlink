@@ -181,6 +181,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="fontsys.c" />
+    <ClCompile Include="fontsys_color.c" />
     <ClCompile Include="fontsys_find_win.cpp" />
     <ClCompile Include="fontsys_hl.c" />
     <!-- FreeType 2.13.3 (vendored), modules listed in ftmodule.h. Kept unmodified: silence its
@@ -256,9 +257,9 @@
     <!-- HarfBuzz (vendored, include/harfbuzz/README-hashlink.md): the amalgamation with hb-ft.
          Kept unmodified; it needs /bigobj. -->
     <ClCompile Include="..\..\include\harfbuzz\src\harfbuzz.cc">
-      <PreprocessorDefinitions>HAVE_FREETYPE=1;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HAVE_FREETYPE=1;HB_LEAN;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <DisableSpecificWarnings>4244;4267;4146;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4244;4267;4146;4065;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

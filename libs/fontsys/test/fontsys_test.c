@@ -231,6 +231,120 @@ static void test_render_emoji(void) {
     fontsys_destroy(ctx);
 }
 
+/* Colour emoji: a face's colour data, HarfBuzz joining a sequence into the
+   font's one glyph for it, and colour rendering (RGBA, straight alpha). */
+#define COLOR_EM 64
+static int shape(fontsys_ctx *ctx, int face, const unsigned *cps, int n, unsigned *glyph) {
+    *glyph = 0;
+    return fontsys_shape_cluster(ctx, face, cps, n, glyph);
+}
+
+/* Some pixel is clearly coloured (not grey) and opaque; and some edge pixel
+   has colour brighter than its alpha, which premultiplied data never has. */
+static void check_color_pixels(const unsigned char *px, const fontsys_glyph *g) {
+    int i, n = g->width * g->height, colourful = 0, straight = 0;
+    for (i = 0; i < n; i++) {
+        const unsigned char *p = px + i * 4;
+        int mx = p[0] > p[1] ? (p[0] > p[2] ? p[0] : p[2]) : (p[1] > p[2] ? p[1] : p[2]);
+        if (p[3] > 200 && abs((int)p[0] - (int)p[2]) > 60) colourful = 1;
+        if (p[3] >= 1 && p[3] <= 127 && mx > p[3]) straight = 1;
+    }
+    CHECK(colourful);
+    CHECK(straight); /* straight alpha, not premultiplied */
+}
+
+static void check_flags_font(fontsys_ctx *ctx, const char *path, unsigned char *px, int cap) {
+    static const unsigned gb[] = {0x1F1EC, 0x1F1E7};
+    fontsys_glyph g;
+    unsigned glyph;
+    int face = fontsys_face_open(ctx, path, 0), r;
+    CHECK(face >= 0);
+    if (face < 0) return;
+    CHECK(fontsys_face_is_color(ctx, face) == 1);
+    CHECK(shape(ctx, face, gb, 2, &glyph) == 1);
+    memset(&g, 0, sizeof(g));
+    r = fontsys_render_color(ctx, face, glyph, COLOR_EM, px, cap, &g);
+#ifdef _WIN32
+    CHECK(r == 0); /* no PNG decoding on Windows */
+#else
+    CHECK(r == 1);
+    if (r == 1) {
+        CHECK(g.width >= COLOR_EM / 2 && g.width <= COLOR_EM * 2);
+        check_color_pixels(px, &g);
+    }
+#endif
+}
+
+static void test_color_emoji(void) {
+    static const unsigned thumb[] = {0x1F44D}, thumb_tone[] = {0x1F44D, 0x1F3FD};
+    static const unsigned family[] = {0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467};
+    static const unsigned technologist[] = {0x1F469, 0x200D, 0x1F4BB};
+    static const unsigned scotland[] = {0x1F3F4, 0xE0067, 0xE0062, 0xE0073, 0xE0063, 0xE0074, 0xE007F};
+    static const unsigned keycap[] = {0x31, 0xFE0F, 0x20E3}, heart[] = {0x2764, 0xFE0F};
+    static const unsigned grin[] = {CP_GRIN}, ab[] = {0x41, 0x42}, a[] = {0x41};
+    static unsigned char px[256 * 256 * 4];
+    const char *flags_font = getenv("FONTSYS_TEST_BITMAP_EMOJI_FLAGS");
+    fontsys_ctx *ctx = fontsys_create();
+    fontsys_glyph g;
+    unsigned glyph, plain;
+    int emoji, text;
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+#ifdef _WIN32
+    emoji = fontsys_face_open(ctx, "C:/Windows/Fonts/seguiemj.ttf", 0);
+    text = fontsys_face_open(ctx, "C:/Windows/Fonts/arial.ttf", 0);
+    CHECK(emoji >= 0 && text >= 0);
+    if (emoji >= 0 && text >= 0) {
+        CHECK(fontsys_face_is_color(ctx, emoji) == 1);
+        CHECK(fontsys_face_is_color(ctx, text) == 0);
+
+        CHECK(shape(ctx, emoji, thumb, 1, &plain) == 1);
+        CHECK(shape(ctx, emoji, thumb_tone, 2, &glyph) == 1);
+        CHECK(glyph != 0 && glyph != plain); /* the toned thumb, not the yellow one */
+        CHECK(shape(ctx, emoji, technologist, 3, &glyph) == 1);
+        CHECK(shape(ctx, emoji, scotland, 7, &glyph) == 1);
+        /* Segoe UI Emoji (Windows 11) has no gendered family glyphs: a
+           sequence the font does not join is not one glyph. */
+        CHECK(shape(ctx, emoji, family, 5, &glyph) == 0);
+        CHECK(shape(ctx, emoji, keycap, 3, &glyph) == 1);
+        CHECK(shape(ctx, emoji, heart, 2, &glyph) == 1);
+        CHECK(shape(ctx, text, ab, 2, &glyph) == 0);
+
+        CHECK(shape(ctx, emoji, grin, 1, &glyph) == 1);
+        memset(&g, 0, sizeof(g));
+        CHECK(fontsys_render_color(ctx, emoji, glyph, COLOR_EM, px, sizeof(px), &g) == 1);
+        CHECK(g.width >= 48 && g.width <= 80 && g.height >= 48 && g.height <= 80);
+        CHECK(g.advance > COLOR_EM / 2);
+        check_color_pixels(px, &g);
+        /* too small a buffer: -1 with the size set */
+        memset(&g, 0, sizeof(g));
+        CHECK(fontsys_render_color(ctx, emoji, glyph, COLOR_EM, px, 16, &g) == -1);
+        CHECK(g.width > 0 && g.height > 0);
+
+        CHECK(shape(ctx, text, a, 1, &glyph) == 1);
+        CHECK(fontsys_render_color(ctx, text, glyph, COLOR_EM, px, sizeof(px), &g) == 0);
+    }
+#endif
+#ifdef __ANDROID__
+    emoji = fontsys_face_open(ctx, "/system/fonts/NotoColorEmoji.ttf", 0);
+    CHECK(emoji >= 0);
+    if (emoji >= 0) {
+        CHECK(fontsys_face_is_color(ctx, emoji) == 1);
+        CHECK(shape(ctx, emoji, family, 5, &glyph) == 1);
+        CHECK(shape(ctx, emoji, thumb_tone, 2, &glyph) == 1);
+        memset(&g, 0, sizeof(g));
+        CHECK(fontsys_render_color(ctx, emoji, glyph, COLOR_EM, px, sizeof(px), &g) == 1);
+        CHECK(g.width >= COLOR_EM / 2 && g.width <= COLOR_EM * 2);
+        check_color_pixels(px, &g);
+    }
+    if (!flags_font || !*flags_font) flags_font = "/system/fonts/NotoColorEmojiFlags.ttf";
+#endif
+    if (flags_font && *flags_font) check_flags_font(ctx, flags_font, px, sizeof(px));
+    (void)emoji; (void)text; (void)plain; (void)g;
+    fontsys_destroy(ctx);
+}
+
 /* HarfBuzz is compiled into fontsys_core. */
 static void test_harfbuzz_linked(void) {
     unsigned major = 0, minor = 0, micro = 0;
@@ -447,6 +561,7 @@ int main(void) {
 #endif
     test_render_emoji();
     test_harfbuzz_linked();
+    test_color_emoji();
     test_find();
 
     if (failures) {

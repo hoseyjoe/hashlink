@@ -44,6 +44,14 @@ int fontsys_file_face_index(fontsys_ctx *ctx, const char *path, const char *ps_n
    the cache, so a lookup can test many files (Android fonts.xml). */
 int fontsys_file_has(fontsys_ctx *ctx, const char *path, int index, unsigned cp);
 
+/* The FreeType face (an FT_Face) of an open face, else NULL. For
+   fontsys_color.c, which keeps FreeType and HarfBuzz out of this header. */
+struct FT_FaceRec_ *fontsys_ft_face(fontsys_ctx *ctx, int face);
+
+/* The open face's HarfBuzz font slot (an hb_font_t *, NULL until
+   fontsys_color.c creates it), else NULL. fontsys_destroy destroys it. */
+void **fontsys_hb_font_slot(fontsys_ctx *ctx, int face);
+
 #ifdef __cplusplus
 }
 #endif

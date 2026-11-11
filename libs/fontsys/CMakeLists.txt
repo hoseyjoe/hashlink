@@ -75,6 +75,7 @@ endif()
 # plain C test below can link it.
 add_library(fontsys_core STATIC
     fontsys.c
+    fontsys_color.c
     fontsys_internal.h
     ${FONTSYS_FIND_SOURCES}
     ${FREETYPE_SOURCES}
@@ -89,7 +90,7 @@ target_include_directories(fontsys_core BEFORE
 )
 # PUBLIC: the tests call HarfBuzz (hb_version) to check it is linked.
 target_include_directories(fontsys_core PUBLIC ${HARFBUZZ_DIR}/src)
-set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES COMPILE_DEFINITIONS HAVE_FREETYPE=1)
+set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES COMPILE_DEFINITIONS "HAVE_FREETYPE=1;HB_LEAN")
 if(NOT WIN32)
     target_include_directories(fontsys_core PRIVATE ${PNG_DIR})
     # PNG_ARM_NEON_OPT=0: libpng's NEON filters (its arm/ folder) are not vendored.
@@ -134,7 +135,7 @@ if(MSVC)
     )
     # HarfBuzz, also unmodified: too many sections for the default object format.
     set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES
-        COMPILE_OPTIONS "/bigobj;/wd4244;/wd4267;/wd4146"
+        COMPILE_OPTIONS "/bigobj;/wd4244;/wd4267;/wd4146;/wd4065"
     )
 else()
     # HarfBuzz is built without exceptions or RTTI and its symbols stay

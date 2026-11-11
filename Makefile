@@ -122,7 +122,7 @@ HEAPS += include/meshoptimizer/allocator.o include/meshoptimizer/clusterizer.o \
 HEAPS_CPPFLAGS = -I include/mikktspace -I include/meshoptimizer -I include/vhacd -I include/renderdoc
 
 # fontsys: the OS lookup object (fontsys_find_<os>) is added per OS below.
-FONTSYS = libs/fontsys/fontsys.o libs/fontsys/fontsys_hl.o
+FONTSYS = libs/fontsys/fontsys.o libs/fontsys/fontsys_color.o libs/fontsys/fontsys_hl.o
 # FreeType 2.13.3 (vendored), modules listed in libs/fontsys/ftmodule.h.
 # Linked as an archive so --exclude-libs can keep its FT_* symbols out of
 # fontsys.hdll's exports (they would clash with a system libfreetype).
@@ -362,7 +362,7 @@ $(FONTSYS_FT_LIB): $(FONTSYS_FT)
 	$(AR) rcs $@ $^
 # .SUFFIXES below has no .cc: an explicit rule for the HarfBuzz amalgamation.
 include/harfbuzz/src/harfbuzz.o: include/harfbuzz/src/harfbuzz.cc
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -D HAVE_FREETYPE=1 -Os -fno-exceptions -fno-rtti -fvisibility=hidden -fvisibility-inlines-hidden -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -D HAVE_FREETYPE=1 -D HB_LEAN -Os -fno-exceptions -fno-rtti -fvisibility=hidden -fvisibility-inlines-hidden -c $< -o $@
 $(FONTSYS_PNG): CFLAGS += -fvisibility=hidden
 # HarfBuzz is C++.
 fontsys.hdll: HDLL_LINK = $(CXX) $(LDFLAGS)

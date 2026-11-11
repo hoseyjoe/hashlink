@@ -11,6 +11,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_MODULE_H
+#include <hb.h>
 
 #ifdef _WIN32
 #   define WIN32_LEAN_AND_MEAN
@@ -30,6 +31,7 @@ typedef struct {
     char *path;     /* UTF-8, owned */
     int index;
     FT_Face face;
+    hb_font_t *hb;  /* created by fontsys_color.c on first shape, owned */
 } fontsys_face_entry;
 
 struct fontsys_ctx {
@@ -54,6 +56,8 @@ void fontsys_destroy(fontsys_ctx *ctx) {
     int i;
     if (!ctx) return;
     for (i = 0; i < ctx->face_count; i++) {
+        /* The HarfBuzz font reads the FreeType face: destroy it first. */
+        if (ctx->faces[i].hb) hb_font_destroy(ctx->faces[i].hb);
         FT_Done_Face(ctx->faces[i].face);
         free(ctx->faces[i].path);
     }
@@ -239,12 +243,22 @@ int fontsys_face_open(fontsys_ctx *ctx, const char *path, int index) {
     ctx->faces[i].path = copy;
     ctx->faces[i].index = index;
     ctx->faces[i].face = face;
+    ctx->faces[i].hb = NULL;
     return i;
 }
 
 static FT_Face get_face(fontsys_ctx *ctx, int face) {
     if (!ctx || face < 0 || face >= ctx->face_count) return NULL;
     return ctx->faces[face].face;
+}
+
+struct FT_FaceRec_ *fontsys_ft_face(fontsys_ctx *ctx, int face) {
+    return get_face(ctx, face);
+}
+
+void **fontsys_hb_font_slot(fontsys_ctx *ctx, int face) {
+    if (!get_face(ctx, face)) return NULL;
+    return (void **)&ctx->faces[face].hb;
 }
 
 int fontsys_face_has(fontsys_ctx *ctx, int face, unsigned cp) {

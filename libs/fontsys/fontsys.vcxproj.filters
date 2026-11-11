@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="fontsys.c" />
+    <ClCompile Include="fontsys_color.c" />
     <ClCompile Include="fontsys_find_win.cpp" />
     <ClCompile Include="fontsys_hl.c" />
     <ClCompile Include="..\..\include\freetype\src\base\ftsystem.c">
