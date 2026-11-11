@@ -18,10 +18,13 @@ Here's the dependencies that you install in order to compile all the libraries:
 * ssl: libmbedtls-dev
 * uv: libuv1-dev
 * sqlite: libsqlite3-dev
+* fontsys (Linux only): libfontconfig1-dev
 
 To install all dependencies on the latest **Ubuntu**, for example:
 
-`sudo apt-get install libpng-dev libturbojpeg-dev libvorbis-dev libopenal-dev libsdl3-dev libglu1-mesa-dev libmbedtls-dev libuv1-dev libsqlite3-dev`
+`sudo apt-get install libpng-dev libturbojpeg-dev libvorbis-dev libopenal-dev libsdl3-dev libglu1-mesa-dev libmbedtls-dev libuv1-dev libsqlite3-dev libfontconfig1-dev`
+
+fontsys (OS font fallback) is built by default. To build without it (and without fontconfig), configure CMake with `-DWITH_FONTSYS=OFF`, or remove `fontsys` from `LIBS` in the Makefile.
 
 `libsdl3-dev` is not released yet, build from source is needed, see [this note](https://wiki.libsdl.org/SDL3/README-linux).
 
