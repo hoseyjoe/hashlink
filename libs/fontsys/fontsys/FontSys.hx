@@ -14,6 +14,12 @@ class FontSys {
 	var buf:hl.Bytes;
 	var bufCap = 0;
 
+	/**
+		Throws if FreeType cannot start, or if fontsys.hdll is missing: the
+		natives are bound as an optional library ("?fontsys"), so a missing
+		hdll does not stop the program at load time; the first native call
+		throws a catchable error instead.
+	**/
 	public function new() {
 		ctx = create();
 		if (ctx == null)
@@ -90,26 +96,26 @@ class FontSys {
 		buf = null;
 	}
 
-	@:hlNative("fontsys", "hl_create") static function create():Ctx {
+	@:hlNative("?fontsys", "hl_create") static function create():Ctx {
 		return null;
 	}
 
-	@:hlNative("fontsys", "hl_destroy") static function destroy(ctx:Ctx):Void {}
+	@:hlNative("?fontsys", "hl_destroy") static function destroy(ctx:Ctx):Void {}
 
-	@:hlNative("fontsys", "hl_find") static function find_font(ctx:Ctx, code:Int, lang:hl.Bytes, weight:Int, italic:Bool, mono:Bool,
+	@:hlNative("?fontsys", "hl_find") static function find_font(ctx:Ctx, code:Int, lang:hl.Bytes, weight:Int, italic:Bool, mono:Bool,
 		index:hl.Ref<Int>):hl.Bytes {
 		return null;
 	}
 
-	@:hlNative("fontsys", "hl_face_open") static function face_open(ctx:Ctx, path:hl.Bytes, index:Int):Int {
+	@:hlNative("?fontsys", "hl_face_open") static function face_open(ctx:Ctx, path:hl.Bytes, index:Int):Int {
 		return -1;
 	}
 
-	@:hlNative("fontsys", "hl_face_has") static function face_has(ctx:Ctx, face:Int, code:Int):Bool {
+	@:hlNative("?fontsys", "hl_face_has") static function face_has(ctx:Ctx, face:Int, code:Int):Bool {
 		return false;
 	}
 
-	@:hlNative("fontsys", "hl_render_sdf") static function render_sdf(ctx:Ctx, face:Int, code:Int, em:Int, spread:Int, buf:hl.Bytes,
+	@:hlNative("?fontsys", "hl_render_sdf") static function render_sdf(ctx:Ctx, face:Int, code:Int, em:Int, spread:Int, buf:hl.Bytes,
 		bufCap:Int, width:hl.Ref<Int>, height:hl.Ref<Int>, left:hl.Ref<Int>, top:hl.Ref<Int>, advance:hl.Ref<Float>):Int {
 		return -2;
 	}
