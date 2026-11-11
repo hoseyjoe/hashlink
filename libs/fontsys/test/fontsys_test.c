@@ -151,6 +151,44 @@ static void test_render(fontsys_ctx *ctx, int face) {
     }
 }
 
+#ifdef _WIN32
+/* Glyphs whose contours overlap (variable fonts keep their overlaps, like
+   CFF fonts such as Android's Noto Sans CJK). A distance field changes by at
+   most 128/spread per pixel (16 at spread 8); FreeType's outline SDF
+   renderer gets the inside test wrong at overlaps, which shows as holes in
+   the strokes, i.e. jumps of 50+ between neighbours (Bahnschrift N: 58).
+   40 leaves room for the bitmap renderer's edge approximation (<= 31). */
+static void test_render_overlaps(void) {
+    const char *path = "C:/Windows/Fonts/bahnschrift.ttf";
+    const unsigned cps[] = {'N', 'M'};
+    fontsys_ctx *ctx = fontsys_create();
+    int face, i, x, y;
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+    face = fontsys_face_open(ctx, path, 0);
+    CHECK(face >= 0);
+    for (i = 0; face >= 0 && i < 2; i++) {
+        static unsigned char buf[128 * 128];
+        fontsys_glyph g = {0};
+        int jump = 0;
+        CHECK(fontsys_render_sdf(ctx, face, cps[i], EM, SPREAD, buf, sizeof(buf), &g) == 1);
+        for (y = 0; y < g.height; y++) {
+            for (x = 0; x < g.width; x++) {
+                int v = buf[y * g.width + x];
+                if (x + 1 < g.width && abs(v - buf[y * g.width + x + 1]) > jump)
+                    jump = abs(v - buf[y * g.width + x + 1]);
+                if (y + 1 < g.height && abs(v - buf[(y + 1) * g.width + x]) > jump)
+                    jump = abs(v - buf[(y + 1) * g.width + x]);
+            }
+        }
+        if (jump > 40) fprintf(stderr, "Bahnschrift %c: neighbour jump %d\n", (char)cps[i], jump);
+        CHECK(jump <= 40);
+    }
+    fontsys_destroy(ctx);
+}
+#endif
+
 /* fontsys_file_face_index (private, used by the Apple lookup): the face of a
    font file named by PostScript name, else the first face that maps cp. */
 static void test_file_face_index(const char *path) {
@@ -319,6 +357,9 @@ int main(void) {
     }
     fontsys_destroy(ctx);
 
+#ifdef _WIN32
+    test_render_overlaps();
+#endif
     test_find();
 
     if (failures) {

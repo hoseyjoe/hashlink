@@ -283,11 +283,17 @@ int fontsys_render_sdf(fontsys_ctx *ctx, int face, unsigned cp, int em_px, int s
     if (gi == 0) return 0;
 
     if (FT_Set_Pixel_Sizes(f, 0, (FT_UInt)em_px) != 0) return -3;
-    if (FT_Property_Set(ctx->lib, "sdf", "spread", &spread) != 0) return -3;
-    /* bsdf renders glyphs that load as embedded bitmaps: same spread. */
     if (FT_Property_Set(ctx->lib, "bsdf", "spread", &spread) != 0) return -3;
     if (FT_Load_Glyph(f, gi, FT_LOAD_DEFAULT) != 0) return -3;
     slot = f->glyph;
+    /* Rasterize first, then build the SDF from the coverage bitmap (the
+       "bsdf" renderer). FreeType's outline "sdf" renderer gets the inside
+       test wrong where contours overlap (CFF fonts such as Noto Sans CJK):
+       notches at stroke crossings, and stray filled blocks in the padding.
+       The raster is overlap-safe. Same padding (spread on every side), the
+       same left/top shift and the same 128 = edge, inside-high encoding.
+       For a glyph that loads as an embedded bitmap, NORMAL is a no-op. */
+    if (FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL) != 0) return -3;
     if (FT_Render_Glyph(slot, FT_RENDER_MODE_SDF) != 0) return -3;
 
     bm = &slot->bitmap;
