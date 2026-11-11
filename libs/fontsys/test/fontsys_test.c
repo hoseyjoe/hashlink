@@ -189,6 +189,47 @@ static void test_render_overlaps(void) {
 }
 #endif
 
+/* Emoji. Windows' Segoe UI Emoji has monochrome outlines under its colour
+   layers: an emoji renders as one outline SDF. Android's Noto Color Emoji is
+   colour bitmaps (sbix on Android 17, CBDT before) with no outlines: its
+   emoji are a miss (the caller draws a box), never an invisible zero-size
+   glyph. FONTSYS_TEST_BITMAP_EMOJI names such a font
+   (e.g. pulled from a device); without it, Android uses its own. */
+#define CP_GRIN 0x1F600
+static void test_render_emoji(void) {
+    const char *bitmap_font = getenv("FONTSYS_TEST_BITMAP_EMOJI");
+    static unsigned char buf[128 * 128];
+    fontsys_ctx *ctx = fontsys_create();
+    fontsys_glyph g;
+    int face;
+
+    CHECK(ctx != NULL);
+    if (!ctx) return;
+#ifdef _WIN32
+    face = fontsys_face_open(ctx, "C:/Windows/Fonts/seguiemj.ttf", 0);
+    CHECK(face >= 0);
+    if (face >= 0) {
+        memset(&g, 0, sizeof(g));
+        CHECK(fontsys_render_sdf(ctx, face, CP_GRIN, EM, SPREAD, buf, sizeof(buf), &g) == 1);
+        CHECK(g.width > EM / 2 && g.height > EM / 2);
+    }
+#endif
+#ifdef __ANDROID__
+    if (!bitmap_font || !*bitmap_font) bitmap_font = "/system/fonts/NotoColorEmoji.ttf";
+#endif
+    if (bitmap_font && *bitmap_font) {
+        face = fontsys_face_open(ctx, bitmap_font, 0);
+        CHECK(face >= 0);
+        if (face >= 0) {
+            CHECK(fontsys_face_has(ctx, face, CP_GRIN));
+            memset(&g, 0, sizeof(g));
+            /* FT_LOAD_NO_BITMAP finds no outline to load: -3, a miss */
+            CHECK(fontsys_render_sdf(ctx, face, CP_GRIN, EM, SPREAD, buf, sizeof(buf), &g) <= 0);
+        }
+    }
+    fontsys_destroy(ctx);
+}
+
 /* fontsys_file_face_index (private, used by the Apple lookup): the face of a
    font file named by PostScript name, else the first face that maps cp. */
 static void test_file_face_index(const char *path) {
@@ -396,6 +437,7 @@ int main(void) {
 #ifdef _WIN32
     test_render_overlaps();
 #endif
+    test_render_emoji();
     test_find();
 
     if (failures) {

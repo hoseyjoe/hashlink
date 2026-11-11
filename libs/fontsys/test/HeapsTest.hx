@@ -248,6 +248,20 @@ class HeapsTest extends hxd.App {
 		var aBottom = a.t.dy + a.t.height, zhBottom = zh.t.dy + zh.t.height;
 		check(Math.abs(zhBottom - aBottom) <= 0.2 * 48, 'U+4E2D bottom $zhBottom within 0.2 em of A bottom $aBottom');
 		Sys.println('A bottom $aBottom, U+4E2D bottom $zhBottom (dy ${zh.t.dy}, h ${zh.t.height}, w ${zh.t.width}), advance ${zh.width}');
+
+		// An emoji (a surrogate pair, then U+FE0F) is one glyph, and on Windows a real one: Segoe UI
+		// Emoji's monochrome outline. Elsewhere it may be the box (Android's emoji font is bitmaps).
+		var et = new h2d.Text(textFont, s2d);
+		et.text = "A\u{1F600}\u{FE0F}B";
+		@:privateAccess et.updateSize();
+		var count = @:privateAccess et.glyphs.count();
+		check(count == 3, '"A😀️B" draws 3 glyphs (got $count)');
+		var grin = textFont.getChar(0x1F600);
+		if (grin != defaultChar(textFont))
+			Sys.println('U+1F600 from: ${src.lastFacePath} (w ${grin.t.width}, h ${grin.t.height}, advance ${grin.width})');
+		if (Sys.systemName() == "Windows")
+			check(grin != defaultChar(textFont), 'U+1F600 resolved from an OS font');
+		et.remove();
 		textAtlas.dispose();
 	}
 
