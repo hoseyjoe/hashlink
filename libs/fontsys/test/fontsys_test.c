@@ -317,7 +317,12 @@ static void test_find(void) {
     /* A bare Linux install (e.g. a CI runner without fonts-noto-cjk) may have
        no CJK font at all. Windows, macOS and Android always do, so the Han
        checks stay strict there. */
-    have_cjk = fontsys_find(ctx, CP_ZHONG, "zh-Hans", &regular, path, PATH_CAP, &index) == 1;
+    {
+        /* Only "none found" (0) skips; a lookup error (< 0) still fails. */
+        int cjk_rc = fontsys_find(ctx, CP_ZHONG, "zh-Hans", &regular, path, PATH_CAP, &index);
+        CHECK(cjk_rc >= 0);
+        have_cjk = cjk_rc == 1;
+    }
     if (!have_cjk) printf("SKIP: no CJK font installed\n");
 #endif
 

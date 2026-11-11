@@ -295,7 +295,8 @@ int fontsys_render_sdf(fontsys_ctx *ctx, int face, unsigned cp, int em_px, int s
        notches at stroke crossings, and stray filled blocks in the padding.
        The raster is overlap-safe. Same padding (spread on every side), the
        same left/top shift and the same 128 = edge, inside-high encoding.
-       For a glyph that loads as an embedded bitmap, NORMAL is a no-op. */
+       FT_LOAD_NO_BITMAP keeps embedded bitmap strikes out, so this always
+       starts from an outline; a bitmap-only face fails above (-3, a miss). */
     if (FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL) != 0) return -3;
     if (FT_Render_Glyph(slot, FT_RENDER_MODE_SDF) != 0) return -3;
 
