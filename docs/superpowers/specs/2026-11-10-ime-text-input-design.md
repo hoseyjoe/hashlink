@@ -22,7 +22,9 @@ kana, and the IME offers candidate words to pick. Today in a Heaps-on-HashLink a
 - **Android (Gboard):** SDL's Java `SDLInputConnection.updateText()` types the keyboard's composing
   text straight into the field (backspacing and retyping as it changes) and then sends the commit as
   one text event. A multi-character commit ("你好", a predicted English word, a pasted suggestion)
-  is cut to its first character by the same `sdl.c` packing.
+  would be cut to its first character by the same `sdl.c` packing; heaps-android already works
+  around that by patching SDL's Java to send one event per character
+  (`tools/patch-sdl-java.ps1`). The `hasChar` drop below applies here too.
 
 **The final test:** in Simplified (`D:\_github\Simplified`), create a new incident and type its title
 in Chinese (Microsoft Pinyin) and Japanese (Microsoft IME) on Windows, and with Gboard on the attached
