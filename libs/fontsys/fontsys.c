@@ -285,7 +285,9 @@ int fontsys_render_sdf(fontsys_ctx *ctx, int face, unsigned cp, int em_px, int s
 
     if (FT_Set_Pixel_Sizes(f, 0, (FT_UInt)em_px) != 0) return -3;
     if (FT_Property_Set(ctx->lib, "bsdf", "spread", &spread) != 0) return -3;
-    if (FT_Load_Glyph(f, gi, FT_LOAD_DEFAULT) != 0) return -3;
+    /* Outlines only: an embedded bitmap strike at this ppem (old CJK fonts
+       have them) would give a blocky distance field. */
+    if (FT_Load_Glyph(f, gi, FT_LOAD_NO_BITMAP) != 0) return -3;
     slot = f->glyph;
     /* Rasterize first, then build the SDF from the coverage bitmap (the
        "bsdf" renderer). FreeType's outline "sdf" renderer gets the inside
