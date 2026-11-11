@@ -22,12 +22,7 @@ class NativeTest {
 		return "/tmp";
 	}
 
-	static function main() {
-		var fs = new FontSys();
-
-		// A Simplified Chinese glyph is covered by some installed font.
-		var found = fs.find(0x4E2D, "zh-Hans", FontStyle.REGULAR);
-		check(found != null, "find(U+4E2D, zh-Hans) found nothing");
+	static function checkCjk(fs:FontSys, found:{path:String, index:Int}) {
 		Sys.println('U+4E2D -> ${found.path} #${found.index}');
 
 		var face = fs.openFace(found.path, found.index);
@@ -49,6 +44,20 @@ class NativeTest {
 
 		// A face that lacks the code point renders nothing.
 		check(fs.renderSdf(face, 0x10FFFD, 32, 8) == null, "renderSdf(U+10FFFD) != null");
+	}
+
+	static function main() {
+		var fs = new FontSys();
+
+		// A Simplified Chinese glyph is covered by some installed font.
+		var found = fs.find(0x4E2D, "zh-Hans", FontStyle.REGULAR);
+		if (found == null && Sys.systemName() == "Linux") {
+			// A bare Linux install may have no CJK font; Windows, Mac and Android always do.
+			Sys.println("SKIP: no CJK font installed");
+		} else {
+			check(found != null, "find(U+4E2D, zh-Hans) found nothing");
+			checkCjk(fs, found);
+		}
 
 		// A private-use plane-16 code point no installed font covers.
 		check(fs.find(0x10FFFD, "en", FontStyle.REGULAR) == null, "find(U+10FFFD) found a font");
@@ -57,8 +66,10 @@ class NativeTest {
 		var src = "C:/Windows/Fonts/arial.ttf";
 		var srcIndex = 0;
 		if (!sys.FileSystem.exists(src)) {
-			src = found.path;
-			srcIndex = found.index;
+			var latin = fs.find("A".code, "en", FontStyle.REGULAR);
+			check(latin != null, "find(A, en) found nothing");
+			src = latin.path;
+			srcIndex = latin.index;
 		}
 		var ext = src.substr(src.lastIndexOf("."));
 		var copy = tempDir() + "/fontsys_\u6D4B\u8BD5" + ext;

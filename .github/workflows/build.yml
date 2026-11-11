@@ -158,6 +158,14 @@ jobs:
               libsqlite3-dev${SUFFIX} \
               ${EXTRA_APT_PKGS}
 
+            if [[ "${{ matrix.build_system }}" == cmake* ]]; then
+              # The fontsys CTests look up CJK fallback faces through fontconfig.
+              # Fonts are arch-independent, so no ${SUFFIX}.
+              sudo apt-get install --no-install-recommends -y \
+                fonts-noto-cjk \
+                fonts-dejavu-core
+            fi
+
             # ref https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
             sudo apt-get install --no-install-recommends -y \
               libasound2-dev \

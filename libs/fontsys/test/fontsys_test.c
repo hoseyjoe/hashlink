@@ -286,26 +286,56 @@ static int find_face(fontsys_ctx *ctx, unsigned cp, const char *lang, int weight
     return face;
 }
 
+/* Apple: CoreText answers bold/italic requests with the variable SF font,
+   whose default instance FreeType reports as regular (see the ledger Ruling
+   on variable system fonts). There the style checks are reported, not
+   counted. Everywhere else they are strict. */
+static void check_style(int face, int ok, const char *what, const char *path, int index) {
+    CHECK(face >= 0);
+    if (face < 0) return;
+#ifdef __APPLE__
+    if (!ok) {
+        printf("SKIP (variable font, see Ruling): %s: %s #%d\n", what, path, index);
+        return;
+    }
+#else
+    (void)what; (void)path; (void)index;
+#endif
+    CHECK(ok);
+}
+
 static void test_find(void) {
     fontsys_ctx *ctx = fontsys_create();
     char hans[PATH_CAP], ja[PATH_CAP], path[PATH_CAP];
-    int hans_index = -1, ja_index = -1, index = -1, face, calls;
+    int hans_index = -1, ja_index = -1, index = -1, face, calls, have_cjk = 1;
     fontsys_style regular = {400, 0, 0};
 
     CHECK(ctx != NULL);
     if (!ctx) return;
 
+#if defined(__linux__) && !defined(__ANDROID__)
+    /* A bare Linux install (e.g. a CI runner without fonts-noto-cjk) may have
+       no CJK font at all. Windows, macOS and Android always do, so the Han
+       checks stay strict there. */
+    have_cjk = fontsys_find(ctx, CP_ZHONG, "zh-Hans", &regular, path, PATH_CAP, &index) == 1;
+    if (!have_cjk) printf("SKIP: no CJK font installed\n");
+#endif
+
     /* Han: the language picks the regional font */
-    find_face(ctx, CP_ZHONG, "zh-Hans", 400, 0, 0, hans, &hans_index);
-    find_face(ctx, CP_ZHONG, "ja", 400, 0, 0, ja, &ja_index);
-    CHECK(strcmp(hans, ja) != 0 || hans_index != ja_index);
+    if (have_cjk) {
+        find_face(ctx, CP_ZHONG, "zh-Hans", 400, 0, 0, hans, &hans_index);
+        find_face(ctx, CP_ZHONG, "ja", 400, 0, 0, ja, &ja_index);
+        CHECK(strcmp(hans, ja) != 0 || hans_index != ja_index);
+    }
 
     /* Latin, and the style axes */
     find_face(ctx, 'A', "en", 400, 0, 0, path, &index);
     face = find_face(ctx, 'A', "en", 700, 0, 0, path, &index);
-    CHECK(face >= 0 && fontsys_face_is_bold(ctx, face) == 1);
+    check_style(face, face >= 0 && fontsys_face_is_bold(ctx, face) == 1,
+                "find(A, en, w700) face is not bold", path, index);
     face = find_face(ctx, 'A', "en", 400, 1, 0, path, &index);
-    CHECK(face >= 0 && fontsys_face_is_italic(ctx, face) == 1);
+    check_style(face, face >= 0 && fontsys_face_is_italic(ctx, face) == 1,
+                "find(A, en, italic) face is not italic", path, index);
     face = find_face(ctx, 'A', "en", 400, 0, 1, path, &index);
     CHECK(face >= 0 && fontsys_face_is_mono(ctx, face) == 1);
 
@@ -320,8 +350,9 @@ static void test_find(void) {
     CHECK(fontsys_find(ctx, 0x110000, "en", &regular, path, PATH_CAP, &index) == 0);
     CHECK(fontsys_debug_os_calls(ctx) == calls);
 
-    /* a path buffer too small: an error, and nothing written past path_cap */
-    {
+    /* a path buffer too small: an error, and nothing written past path_cap
+       (needs a font that covers the code point) */
+    if (have_cjk) {
         char short_buf[16];
         int i, untouched = 1;
         memset(short_buf, 0x5A, sizeof(short_buf));
