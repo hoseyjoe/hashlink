@@ -145,17 +145,22 @@ int fontsys_render_color(fontsys_ctx *ctx, int face, unsigned glyph, int em_px,
     if (!FT_HAS_COLOR(f)) return 0;
 
     if (FT_HAS_FIXED_SIZES(f)) {
-        /* Colour bitmap strike (sbix, CBDT). A build without PNG support
-           cannot load it: no colour image. */
+        /* Colour bitmap strike (sbix, CBDT), taken whenever the face has
+           strikes, even if it also has colour layers: a CBDT + COLRv1 font
+           (some Noto builds) paints only its bitmaps here, as COLRv1 is not
+           rendered. A build without PNG support cannot load a strike: no
+           colour image. */
         int strike = pick_strike(f, em_px);
         if (FT_Select_Size(f, strike) != 0) return -3;
         if (FT_Load_Glyph(f, glyph, FT_LOAD_COLOR) != 0) return 0;
         s = (double)em_px * 64.0 / (double)f->available_sizes[strike].y_ppem;
     } else {
         /* COLR v0: FreeType blends the layers into a BGRA bitmap. A glyph
-           with no v0 layers (outline only, COLRv1 only) renders grey. */
+           with no v0 layers (outline only, COLRv1 only) renders grey.
+           Unhinted: hinting each layer on its own can shift layers a pixel
+           apart. */
         if (FT_Set_Pixel_Sizes(f, 0, (FT_UInt)em_px) != 0) return -3;
-        if (FT_Load_Glyph(f, glyph, FT_LOAD_COLOR) != 0) return -3;
+        if (FT_Load_Glyph(f, glyph, FT_LOAD_COLOR | FT_LOAD_NO_HINTING) != 0) return -3;
         if (f->glyph->format != FT_GLYPH_FORMAT_BITMAP &&
             FT_Render_Glyph(f->glyph, FT_RENDER_MODE_NORMAL) != 0)
             return -3;
