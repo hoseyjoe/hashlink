@@ -145,8 +145,10 @@ FONTSYS_CPPFLAGS = -I libs/fontsys -I include/freetype/include -I include/harfbu
 FONTSYS_PNG = include/png/png.o include/png/pngerror.o include/png/pngget.o \
 	include/png/pngmem.o include/png/pngpread.o include/png/pngread.o \
 	include/png/pngrio.o include/png/pngrtran.o include/png/pngrutil.o \
-	include/png/pngset.o include/png/pngtrans.o
-FONTSYS_PNG_CPPFLAGS = -I include/png -D FT_CONFIG_OPTION_USE_PNG
+	include/png/pngset.o include/png/pngtrans.o include/png/pngwio.o \
+	include/png/pngwrite.o include/png/pngwtran.o include/png/pngwutil.o
+# PNG_ARM_NEON_OPT=0: libpng's NEON filters (its arm/ folder) are not vendored.
+FONTSYS_PNG_CPPFLAGS = -I include/png -D FT_CONFIG_OPTION_USE_PNG -D PNG_ARM_NEON_OPT=0
 
 LIB = ${PCRE} ${RUNTIME} ${STD}
 

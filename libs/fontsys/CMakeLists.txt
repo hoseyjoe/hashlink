@@ -46,6 +46,12 @@ if(NOT WIN32)
         ${PNG_DIR}/pngrutil.c
         ${PNG_DIR}/pngset.c
         ${PNG_DIR}/pngtrans.c
+        # The read side still calls a few write-side functions; unused code
+        # is dropped at link time.
+        ${PNG_DIR}/pngwio.c
+        ${PNG_DIR}/pngwrite.c
+        ${PNG_DIR}/pngwtran.c
+        ${PNG_DIR}/pngwutil.c
     )
 endif()
 
@@ -86,7 +92,8 @@ target_include_directories(fontsys_core PUBLIC ${HARFBUZZ_DIR}/src)
 set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES COMPILE_DEFINITIONS HAVE_FREETYPE=1)
 if(NOT WIN32)
     target_include_directories(fontsys_core PRIVATE ${PNG_DIR})
-    target_compile_definitions(fontsys_core PRIVATE FT_CONFIG_OPTION_USE_PNG)
+    # PNG_ARM_NEON_OPT=0: libpng's NEON filters (its arm/ folder) are not vendored.
+    target_compile_definitions(fontsys_core PRIVATE FT_CONFIG_OPTION_USE_PNG PNG_ARM_NEON_OPT=0)
     if(ANDROID OR APPLE)
         target_link_libraries(fontsys_core PUBLIC z)
     else()
