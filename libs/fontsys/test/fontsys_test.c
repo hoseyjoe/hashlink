@@ -280,6 +280,7 @@ static void test_color_emoji(void) {
     static const unsigned family[] = {0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467};
     static const unsigned technologist[] = {0x1F469, 0x200D, 0x1F4BB};
     static const unsigned scotland[] = {0x1F3F4, 0xE0067, 0xE0062, 0xE0073, 0xE0063, 0xE0074, 0xE007F};
+    static const unsigned black_flag[] = {0x1F3F4};
     static const unsigned keycap[] = {0x31, 0xFE0F, 0x20E3}, heart[] = {0x2764, 0xFE0F};
     static const unsigned grin[] = {CP_GRIN}, ab[] = {0x41, 0x42}, a[] = {0x41};
     static unsigned char px[256 * 256 * 4];
@@ -303,7 +304,11 @@ static void test_color_emoji(void) {
         CHECK(shape(ctx, emoji, thumb_tone, 2, &glyph) == 1);
         CHECK(glyph != 0 && glyph != plain); /* the toned thumb, not the yellow one */
         CHECK(shape(ctx, emoji, technologist, 3, &glyph) == 1);
-        CHECK(shape(ctx, emoji, scotland, 7, &glyph) == 1);
+        /* Segoe has no subdivision flags. The tag characters are default
+           ignorable, so they are hidden and Scotland is the black flag alone:
+           the base, as UTS #51 suggests for a tag sequence a font lacks. */
+        CHECK(shape(ctx, emoji, black_flag, 1, &plain) == 1);
+        CHECK(shape(ctx, emoji, scotland, 7, &glyph) == 1 && glyph == plain);
         /* Segoe UI Emoji (Windows 11) has no gendered family glyphs: a
            sequence the font does not join is not one glyph. */
         CHECK(shape(ctx, emoji, family, 5, &glyph) == 0);
