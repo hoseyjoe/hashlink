@@ -1,0 +1,5 @@
+-cp libs/sdl/test
+-lib hlsdl
+-main TextEventTest
+-hl bin/sdl-text-test.hl
+--cmd hl bin/sdl-text-test.hl

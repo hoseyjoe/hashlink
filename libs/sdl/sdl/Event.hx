@@ -17,6 +17,9 @@ package sdl;
 	public var __unused : Int;
 	public var windowId : Int;
 	public var dropFile: hl.Bytes;
+	public var text : hl.Bytes;
+	public var editStart : Int;
+	public var editLength : Int;
 
 	// for compile-time backward compatibility
 	public var controller(get,never) : Int;
@@ -41,6 +44,7 @@ enum abstract EventType(Int) {
 	var KeyDown     = 7;
 	var KeyUp       = 8;
 	var TextInput   = 9;
+	var TextEditing = 10;
 	var GControllerAdded    = 100;
 	var GControllerRemoved  = 101;
 	var GControllerDown     = 102;

@@ -45,6 +45,7 @@ typedef enum {
 	KeyDown,
 	KeyUp,
 	TextInput,
+	TextEditing,
 	GControllerAdded = 100,
 	GControllerRemoved,
 	GControllerDown,
@@ -101,6 +102,9 @@ typedef struct {
 	int __unused;
 	int window;
 	vbyte* dropFile;
+	vbyte* text;
+	int editStart;
+	int editLength;
 } event_data;
 
 static bool isGlOptionsSet = false;
@@ -182,6 +186,7 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 	while (true) {
 		SDL_Event e;
 		if ( !SDL_PollEvent(&e) ) break;
+		event->text = NULL;
 
 		// Handle window events first to make porting easier
 		if( e.type >= SDL_EVENT_WINDOW_FIRST && e.type <= SDL_EVENT_WINDOW_LAST)
@@ -303,11 +308,16 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			event->mouseY = e.wheel.y;
 			break;
 		case SDL_EVENT_TEXT_EDITING:
-			// skip
-			continue;
+			event->type = TextEditing;
+			event->window = e.edit.windowID;
+			event->text = hl_copy_bytes((const vbyte*)e.edit.text, (int)strlen(e.edit.text) + 1);
+			event->editStart = e.edit.start;
+			event->editLength = e.edit.length;
+			break;
 		case SDL_EVENT_TEXT_INPUT:
 			event->type = TextInput;
 			event->window = e.text.windowID;
+			event->text = hl_copy_bytes((const vbyte*)e.text.text, (int)strlen(e.text.text) + 1);
 			event->keyCode = *(int*)e.text.text;
 			event->keyCode &= e.text.text[0] ? e.text.text[1] ? e.text.text[2] ? e.text.text[3] ? 0xFFFFFFFF : 0xFFFFFF : 0xFFFF : 0xFF : 0;
 			break;
@@ -468,6 +478,53 @@ HL_PRIM bool HL_NAME(detect_win32)() {
 #	endif
 }
 
+HL_PRIM void HL_NAME(win_start_text_input)( SDL_Window *win ) {
+	SDL_SetEventEnabled(SDL_EVENT_TEXT_INPUT, true);
+	SDL_SetEventEnabled(SDL_EVENT_TEXT_EDITING, true);
+	SDL_StartTextInput(win);
+}
+
+HL_PRIM void HL_NAME(win_stop_text_input)( SDL_Window *win ) {
+	SDL_StopTextInput(win);
+}
+
+HL_PRIM bool HL_NAME(win_text_input_active)( SDL_Window *win ) {
+	return SDL_TextInputActive(win);
+}
+
+// x/y/w/h in window pixels; SDL expects window coordinates
+HL_PRIM void HL_NAME(win_set_text_input_area)( SDL_Window *win, int x, int y, int w, int h, int cursor ) {
+	float d = SDL_GetWindowPixelDensity(win);
+	SDL_Rect r;
+	if( d <= 0 ) d = 1;
+	r.x = (int)(x / d);
+	r.y = (int)(y / d);
+	r.w = (int)(w / d);
+	r.h = (int)(h / d);
+	SDL_SetTextInputArea(win, &r, (int)(cursor / d));
+}
+
+// test only: the strdup'd text is leaked on purpose
+HL_PRIM bool HL_NAME(debug_push_text_event)( bool editing, vbyte *text, int start, int length ) {
+	SDL_Event e;
+	SDL_Window **windows = SDL_GetWindows(NULL);
+	SDL_WindowID wid = (windows && windows[0]) ? SDL_GetWindowID(windows[0]) : 0;
+	if( windows ) SDL_free(windows);
+	SDL_zero(e);
+	if( editing ) {
+		e.type = SDL_EVENT_TEXT_EDITING;
+		e.edit.windowID = wid;
+		e.edit.text = SDL_strdup((const char*)text);
+		e.edit.start = start;
+		e.edit.length = length;
+	} else {
+		e.type = SDL_EVENT_TEXT_INPUT;
+		e.text.windowID = wid;
+		e.text.text = SDL_strdup((const char*)text);
+	}
+	return SDL_PushEvent(&e);
+}
+
 // SDL2 compat: start input for all windows
 HL_PRIM void HL_NAME(text_input)( bool enable ) {
 	SDL_Window **windows;
@@ -575,6 +632,11 @@ DEFINE_PRIM(_VOID, message_box, _BYTES _BYTES _BOOL);
 DEFINE_PRIM(_VOID, set_vsync, _BOOL);
 DEFINE_PRIM(_BOOL, detect_win32, _NO_ARG);
 DEFINE_PRIM(_VOID, text_input, _BOOL);
+DEFINE_PRIM(_VOID, win_start_text_input, TWIN);
+DEFINE_PRIM(_VOID, win_stop_text_input, TWIN);
+DEFINE_PRIM(_BOOL, win_text_input_active, TWIN);
+DEFINE_PRIM(_VOID, win_set_text_input_area, TWIN _I32 _I32 _I32 _I32 _I32);
+DEFINE_PRIM(_BOOL, debug_push_text_event, _BOOL _BYTES _I32 _I32);
 DEFINE_PRIM(_I32, set_relative_mouse_mode, _BOOL);
 DEFINE_PRIM(_BOOL, get_relative_mouse_mode, _NO_ARG);
 DEFINE_PRIM(_I32, capture_mouse, _BOOL);

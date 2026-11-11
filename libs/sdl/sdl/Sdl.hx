@@ -76,6 +76,14 @@ class Sdl {
 
 	static function initOnce() return false;
 	static function eventLoop( e : Dynamic ) return false;
+	/** Test only: push a synthetic SDL text input/editing event. */
+	public static function debugPushTextEvent( editing : Bool, utf8 : String, start : Int, length : Int ) : Bool {
+		return debugPushTextEventImpl(editing, @:privateAccess utf8.toUtf8(), start, length);
+	}
+
+	@:hlNative("?sdl", "debug_push_text_event")
+	static function debugPushTextEventImpl( editing : Bool, text : hl.Bytes, start : Int, length : Int ) : Bool { return false; }
+
 	static function hintValue( name : hl.Bytes, value : hl.Bytes ) return false;
 
 	static var event = new Event();

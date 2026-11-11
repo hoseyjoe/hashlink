@@ -316,6 +316,35 @@ class Window {
 		windows.remove(this);
 	}
 
+	public function startTextInput() : Void {
+		winStartTextInput(win);
+	}
+
+	public function stopTextInput() : Void {
+		winStopTextInput(win);
+	}
+
+	public function isTextInputActive() : Bool {
+		return winTextInputActive(win);
+	}
+
+	/** Rectangle and cursor offset in window pixels. */
+	public function setTextInputArea( x : Int, y : Int, w : Int, h : Int, cursor : Int ) : Void {
+		winSetTextInputArea(win, x, y, w, h, cursor);
+	}
+
+	@:hlNative("?sdl", "win_start_text_input")
+	static function winStartTextInput( win : WinPtr ) {}
+
+	@:hlNative("?sdl", "win_stop_text_input")
+	static function winStopTextInput( win : WinPtr ) {}
+
+	@:hlNative("?sdl", "win_text_input_active")
+	static function winTextInputActive( win : WinPtr ) : Bool { return false; }
+
+	@:hlNative("?sdl", "win_set_text_input_area")
+	static function winSetTextInputArea( win : WinPtr, x : Int, y : Int, w : Int, h : Int, cursor : Int ) {}
+
 	public function setMaximized(maximized: Bool) : Void {
 		winSetMaximized(win, maximized);
 	}
