@@ -3,6 +3,14 @@
  *
  * Plain C, no HashLink types: the HashLink bindings live in fontsys_hl.c.
  * All paths are UTF-8.
+ *
+ * Threads: a fontsys_ctx is not thread-safe. Use one context per thread
+ * (each has its own FreeType library and face cache).
+ *
+ * Android: fontsys_find uses the NDK AFontMatcher (API 29+), which only works
+ * in an app (zygote-forked) process; a plain executable run from adb shell
+ * crashes in minikin (SIGSEGV). Set FONTSYS_FORCE_FONTS_XML=1 in the
+ * environment of command-line tests to use the /system/etc/fonts.xml lookup.
  */
 #ifndef FONTSYS_H
 #define FONTSYS_H
@@ -21,7 +29,14 @@ typedef struct {
 
 fontsys_ctx *fontsys_create(void);
 void fontsys_destroy(fontsys_ctx *ctx);
-/* 1 found, 0 nothing covers it, <0 error. path is UTF-8. */
+/* 1 found, 0 nothing covers it, <0 error. path is UTF-8.
+   lang is a BCP 47 tag ("zh-Hans", "ja"); it picks the regional forms of Han
+   characters. NULL or "" means the OS's own language:
+     Windows: the user's default locale (GetUserDefaultLocaleName);
+     macOS/iOS: the user's preferred language (CoreText's default);
+     Linux: fontconfig's default language (FC_LANG, else LC_ALL/LC_CTYPE/LANG);
+     Android: the device locale (persist.sys.locale, else ro.product.locale,
+     else "en"). */
 int fontsys_find(fontsys_ctx *ctx, unsigned cp, const char *lang, const fontsys_style *style,
                  char *path_out, int path_cap, int *index_out);
 /* face id >= 0, or <0 on failure. Cached by (path, index). */

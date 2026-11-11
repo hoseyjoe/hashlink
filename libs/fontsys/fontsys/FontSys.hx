@@ -29,6 +29,7 @@ class FontSys {
 	/**
 		An installed font covering `code` for the BCP 47 language `lang`
 		(e.g. "zh-Hans", "ja") and `style`, or null if none does.
+		An empty or null `lang` means the OS's own language (see fontsys.h).
 	**/
 	public function find(code:Int, lang:String, style:FontStyle):Null<{path:String, index:Int}> {
 		if (style == null)

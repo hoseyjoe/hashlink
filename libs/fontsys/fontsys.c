@@ -72,7 +72,8 @@ void **fontsys_os_state(fontsys_ctx *ctx) {
 
 int fontsys_find(fontsys_ctx *ctx, unsigned cp, const char *lang, const fontsys_style *style,
                  char *path_out, int path_cap, int *index_out) {
-    if (!ctx || !lang || !style || !path_out || path_cap <= 0 || !index_out) return -1;
+    if (!ctx || !style || !path_out || path_cap <= 0 || !index_out) return -1;
+    if (!lang) lang = ""; /* the OS's own language (see fontsys.h) */
     /* Not Unicode scalar values: no font maps them, so never ask the OS. */
     if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) return 0;
     ctx->os_calls++;

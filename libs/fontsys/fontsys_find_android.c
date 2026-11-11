@@ -12,6 +12,16 @@
  * the font choice in fontsys_fontsxml.c.
  *
  * Either way the font must really map the code point (FreeType cmap check).
+ *
+ * An empty lang means the device's language: the system property
+ * persist.sys.locale (set when the user picks a language), else
+ * ro.product.locale (the factory default), else "en". Android 13+ per-app
+ * languages are not seen here; pass the tag explicitly for those.
+ *
+ * AFontMatcher only works in an app (zygote-forked) process: in a plain
+ * executable run from adb shell, AFontMatcher_match crashes (SIGSEGV in
+ * minikin). Command-line tests (fontsys_test on a device) must set
+ * FONTSYS_FORCE_FONTS_XML=1.
  */
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -20,6 +30,7 @@
 #include <string.h>
 
 #include <android/log.h>
+#include <sys/system_properties.h>
 
 #include "fontsys_fontsxml.h"
 #include "fontsys_internal.h"
@@ -175,12 +186,32 @@ static int find_with_fonts_xml(android_state *st, fontsys_ctx *ctx, unsigned cp,
     return put_result(st->xml.fonts[i].path, st->xml.fonts[i].index, path_out, path_cap, index_out);
 }
 
+/* The device's language as a BCP 47 tag ("zh-CN", "ja-JP"), for an empty lang.
+   out must hold PROP_VALUE_MAX bytes. */
+static void device_locale(char *out) {
+    static const char *const props[] = {"persist.sys.locale", "ro.product.locale"};
+    size_t i;
+
+    out[0] = 0;
+    for (i = 0; i < sizeof(props) / sizeof(props[0]) && !out[0]; i++)
+        if (__system_property_get(props[i], out) <= 0) out[0] = 0;
+    if (!out[0]) strcpy(out, "en");
+    /* Old-style "zh_CN" to BCP 47 "zh-CN". */
+    for (i = 0; out[i]; i++)
+        if (out[i] == '_') out[i] = '-';
+}
+
 int fontsys_os_find(fontsys_ctx *ctx, unsigned cp, const char *lang, const fontsys_style *style,
                     char *path_out, int path_cap, int *index_out) {
     android_state *st = get_state(ctx);
     int weight = style->weight < 1 ? 400 : style->weight > 1000 ? 1000 : style->weight;
+    char device_lang[PROP_VALUE_MAX];
 
     if (!st) return -1;
+    if (!lang || !*lang) {
+        device_locale(device_lang);
+        lang = device_lang;
+    }
     if (st->libandroid)
         return find_with_matcher(st, ctx, cp, lang, style, weight, path_out, path_cap, index_out);
     return find_with_fonts_xml(st, ctx, cp, lang, style, path_out, path_cap, index_out);

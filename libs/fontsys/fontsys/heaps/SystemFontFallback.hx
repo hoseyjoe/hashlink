@@ -50,7 +50,8 @@ class SystemFontFallback implements FontFallback {
 
 	/**
 		BCP 47 language tag picking Han forms ("zh-Hans", "zh-Hant", "ja", "ko", ...).
-		Changing it affects only lookups not made yet.
+		"" (or null) means the OS's own language (on Android, the device locale; see
+		fontsys.h). Changing it affects only lookups not made yet.
 	**/
 	public var language:String = "en";
 
