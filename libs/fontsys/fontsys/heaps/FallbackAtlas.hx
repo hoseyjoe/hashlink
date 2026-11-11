@@ -7,12 +7,16 @@ private class Page {
 	public var tex:h3d.mat.Texture;
 	public var pixels:hxd.Pixels;
 	public var dirty = false;
+	/** Pixels left free right of and below each glyph. **/
+	public var gutter:Int;
 	/** Shelf packer state: current row's origin and height, next free x. **/
 	public var shelfY = 0;
 	public var shelfH = 0;
 	public var cursorX = 0;
 
-	public function new() {}
+	public function new(gutter) {
+		this.gutter = gutter;
+	}
 }
 
 /**
@@ -23,10 +27,15 @@ private class Page {
 	once `maxPages` pages are full, `place` returns null.
 
 	Colour glyphs (emoji, `placeColor`) go on separate colour pages: RGBA with straight alpha, as
-	rendered, capped at `maxColorPages` and packed, uploaded and restored the same way.
+	rendered, capped at `maxColorPages` and packed, uploaded and restored the same way. They are
+	authored at 64 px and drawn at text sizes, often 4-5x smaller, so colour pages are mipmapped,
+	glyphs sit COLOR_GUTTER px apart (mip levels then mix no neighbours) and transparent texels near
+	a glyph take the colour beside them, alpha staying 0, so filtering does not darken edges.
 **/
 class FallbackAtlas {
 	static inline var GUTTER = 1;
+	/** Mip level 2 (4x smaller) averages 4x4 blocks: a 4 px gap keeps neighbours apart. **/
+	static inline var COLOR_GUTTER = 4;
 
 	/** Number of SDF pages allocated so far. **/
 	public var pageCount(default, null) = 0;
@@ -79,7 +88,7 @@ class FallbackAtlas {
 				}
 				return null;
 			}
-			p = newPage(colorPages);
+			p = newPage(colorPages, true);
 			colorPageCount = colorPages.length;
 			fit(p, w, h);
 		}
@@ -88,6 +97,7 @@ class FallbackAtlas {
 		var dst = p.pixels.bytes;
 		for (row in 0...h)
 			dst.blit(((y + row) * pageSize + x) * 4, g.pixels, row * w * 4, w * 4);
+		bleed(p, x - COLOR_GUTTER, y - COLOR_GUTTER, w + 2 * COLOR_GUTTER, h + 2 * COLOR_GUTTER);
 		return changed(p, x, y, w, h);
 	}
 
@@ -114,7 +124,7 @@ class FallbackAtlas {
 			}
 			return null;
 		}
-		var p = newPage(pages);
+		var p = newPage(pages, false);
 		pageCount = pages.length;
 		fit(p, w, h);
 		return put(p, g);
@@ -122,7 +132,7 @@ class FallbackAtlas {
 
 	/** Takes the w x h slot at the page's cursor (after `fit` said it fits). **/
 	function reserve(p:Page, w:Int, h:Int) {
-		p.cursorX += w + GUTTER;
+		p.cursorX += w + p.gutter;
 		if (h > p.shelfH)
 			p.shelfH = h;
 	}
@@ -143,7 +153,7 @@ class FallbackAtlas {
 	function fit(p:Page, w:Int, h:Int):Bool {
 		if (p.cursorX + w > pageSize) {
 			// Close the shelf and start a new one below it.
-			var ny = p.shelfY + p.shelfH + (p.shelfH > 0 ? GUTTER : 0);
+			var ny = p.shelfY + p.shelfH + (p.shelfH > 0 ? p.gutter : 0);
 			if (ny + h > pageSize)
 				return false;
 			p.shelfY = ny;
@@ -176,11 +186,65 @@ class FallbackAtlas {
 		return changed(p, x, y, w, h);
 	}
 
-	function newPage(list:Array<Page>):Page {
-		var p = new Page();
+	/**
+		Gives each transparent texel in the rectangle (clipped to the page) the average colour of
+		its non-transparent neighbours, COLOR_GUTTER rings deep; alpha is left as it is.
+	**/
+	function bleed(p:Page, x0:Int, y0:Int, w:Int, h:Int) {
+		var x1 = x0 + w < pageSize ? x0 + w : pageSize, y1 = y0 + h < pageSize ? y0 + h : pageSize;
+		if (x0 < 0) x0 = 0;
+		if (y0 < 0) y0 = 0;
+		w = x1 - x0;
+		h = y1 - y0;
+		if (w <= 0 || h <= 0)
+			return;
+		var b = p.pixels.bytes;
+		// known: has a colour to give (opaque-ish, or filled by an earlier ring).
+		var known = haxe.io.Bytes.alloc(w * h);
+		for (y in 0...h)
+			for (x in 0...w)
+				if (b.get(((y0 + y) * pageSize + x0 + x) * 4 + 3) != 0)
+					known.set(y * w + x, 1);
+		for (ring in 0...COLOR_GUTTER) {
+			var filled = [];
+			for (y in 0...h)
+				for (x in 0...w) {
+					if (known.get(y * w + x) != 0)
+						continue;
+					var r = 0, g = 0, bl = 0, n = 0;
+					for (dy in -1...2)
+						for (dx in -1...2) {
+							var nx = x + dx, ny = y + dy;
+							if (nx < 0 || ny < 0 || nx >= w || ny >= h || known.get(ny * w + nx) == 0)
+								continue;
+							var i = ((y0 + ny) * pageSize + x0 + nx) * 4;
+							r += b.get(i);
+							g += b.get(i + 1);
+							bl += b.get(i + 2);
+							n++;
+						}
+					if (n == 0)
+						continue;
+					var i = ((y0 + y) * pageSize + x0 + x) * 4;
+					b.set(i, Std.int(r / n));
+					b.set(i + 1, Std.int(g / n));
+					b.set(i + 2, Std.int(bl / n));
+					filled.push(y * w + x);
+				}
+			if (filled.length == 0)
+				break;
+			for (k in filled)
+				known.set(k, 1);
+		}
+	}
+
+	function newPage(list:Array<Page>, color:Bool):Page {
+		var p = new Page(color ? COLOR_GUTTER : GUTTER);
 		p.pixels = hxd.Pixels.alloc(pageSize, pageSize, RGBA);
-		p.tex = new h3d.mat.Texture(pageSize, pageSize, [NoAlloc], RGBA);
+		p.tex = new h3d.mat.Texture(pageSize, pageSize, color ? [NoAlloc, MipMapped] : [NoAlloc], RGBA);
 		p.tex.filter = Linear;
+		if (color)
+			p.tex.mipMap = Linear;
 		p.tex.realloc = function() {
 			if (p.pixels == null)
 				return;

@@ -137,6 +137,38 @@ class HeapsTest extends hxd.App {
 		check(px2 == 0xFF2060C0, 'colour page restored after context loss (got ${StringTools.hex(px2, 8)})');
 		a.dispose();
 		check(a.placeColor(colorGlyph(8, 8, 0xFFFFFFFF)) == null, 'placeColor after dispose returns null');
+		colorMipTests();
+	}
+
+	/**
+		Colour glyphs are drawn 4-5x smaller than authored at UI sizes: colour pages are mipmapped,
+		glyphs sit 4 px apart so mip levels do not mix neighbours, and transparent texels take the
+		nearby colour (alpha stays 0) so filtering does not darken edges.
+	**/
+	static function colorMipTests() {
+		var a = new FallbackAtlas(256, 1, 1);
+		var g1 = a.placeColor(colorGlyph(10, 10, 0x00FF00FF));
+		var g2 = a.placeColor(colorGlyph(10, 10, 0x00FF00FF));
+		check(g2.x - g1.x == 14, 'colour glyphs 4 px apart (x ${g1.x} then ${g2.x})');
+		var tex = g1.getTexture();
+		check(tex.flags.has(MipMapped) && tex.mipMap == Linear, 'colour pages are mipmapped, linear mip filter');
+		// 3x1: transparent, red, transparent (RGB of the transparent texels is 0 as rendered).
+		var g = new ColorGlyph();
+		g.width = 3;
+		g.height = 1;
+		g.top = 1;
+		g.advance = 3;
+		g.pixels = haxe.io.Bytes.alloc(12);
+		g.pixels.set(4, 0xFF);
+		g.pixels.set(7, 0xFF);
+		var t = a.placeColor(g);
+		a.flush();
+		var px = t.getTexture().capturePixels();
+		var x = Std.int(t.x), y = Std.int(t.y);
+		check(px.getPixel(x + 1, y) == 0xFFFF0000, 'opaque texel kept (got ${StringTools.hex(px.getPixel(x + 1, y), 8)})');
+		check(px.getPixel(x, y) == 0x00FF0000, 'transparent texel in the glyph takes the colour beside it, alpha 0 (got ${StringTools.hex(px.getPixel(x, y), 8)})');
+		check(px.getPixel(x + 3, y) == 0x00FF0000, 'gutter texel takes the colour beside it, alpha 0 (got ${StringTools.hex(px.getPixel(x + 3, y), 8)})');
+		a.dispose();
 	}
 
 	static function overlap(a:h2d.Tile, b:h2d.Tile):Bool {
