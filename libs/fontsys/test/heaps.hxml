@@ -2,6 +2,8 @@
 # Run from the repository root (needs `haxelib dev hlfontsys libs/fontsys`):
 #   haxe libs/fontsys/test/heaps.hxml && C:/SDKs/hashlink/hl.exe bin/fontsys-heaps-test.hl
 # (bin/ is git-ignored; the "hl" on PATH works too if it has sdl.hdll and fontsys.hdll.)
+# Also tests SystemFontFallback, which needs h2d.Font.FontFallback: "-lib heaps" must resolve
+# to the Heaps fork on its system-font-fallback branch (haxelib dev heaps <fork>).
 -lib heaps
 -lib hlsdl
 -lib hlfontsys
