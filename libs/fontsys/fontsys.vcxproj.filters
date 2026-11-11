@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="freetype">
+      <UniqueIdentifier>{3E6B1A1C-5F0D-4D57-9C0B-7A4F2D9E8B11}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="fontsys.c" />
+    <ClCompile Include="fontsys_find_win.cpp" />
+    <ClCompile Include="fontsys_hl.c" />
+    <ClCompile Include="..\..\include\freetype\src\base\ftsystem.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftinit.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftdebug.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftbase.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftbitmap.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftglyph.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\base\ftmm.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\truetype\truetype.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\sfnt\sfnt.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\cff\cff.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\psaux\psaux.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\psnames\psnames.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\pshinter\pshinter.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\smooth\smooth.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\sdf\sdf.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\autofit\autofit.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\include\freetype\src\gzip\ftgzip.c">
+      <Filter>freetype</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="fontsys.h" />
+    <ClInclude Include="fontsys_internal.h" />
+    <ClInclude Include="ftmodule.h" />
+  </ItemGroup>
+</Project>

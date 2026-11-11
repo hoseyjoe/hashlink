@@ -7,7 +7,7 @@ INSTALL_BIN_DIR ?= $(PREFIX)/bin
 INSTALL_LIB_DIR ?= $(PREFIX)/lib
 INSTALL_INCLUDE_DIR ?= $(PREFIX)/include
 
-LIBS = $(addsuffix .hdll,fmt sdl ssl openal ui uv mysql sqlite heaps)
+LIBS = $(addsuffix .hdll,fmt sdl ssl openal ui uv mysql sqlite heaps fontsys)
 ARCH ?= $(shell uname -m)
 
 CFLAGS = -Wall -O3 -std=c11 -fvisibility=hidden -MMD -MP
@@ -121,6 +121,23 @@ HEAPS += include/meshoptimizer/allocator.o include/meshoptimizer/clusterizer.o \
 	include/meshoptimizer/vertexfilter.o include/meshoptimizer/vfetchoptimizer.o
 HEAPS_CPPFLAGS = -I include/mikktspace -I include/meshoptimizer -I include/vhacd -I include/renderdoc
 
+# fontsys: the OS lookup object (fontsys_find_<os>) is added per OS below.
+FONTSYS = libs/fontsys/fontsys.o libs/fontsys/fontsys_hl.o
+# FreeType 2.13.3 (vendored), modules listed in libs/fontsys/ftmodule.h.
+# Linked as an archive so --exclude-libs can keep its FT_* symbols out of
+# fontsys.hdll's exports (they would clash with a system libfreetype).
+FONTSYS_FT = include/freetype/src/base/ftsystem.o include/freetype/src/base/ftinit.o \
+	include/freetype/src/base/ftdebug.o include/freetype/src/base/ftbase.o \
+	include/freetype/src/base/ftbitmap.o include/freetype/src/base/ftglyph.o \
+	include/freetype/src/base/ftmm.o include/freetype/src/truetype/truetype.o \
+	include/freetype/src/sfnt/sfnt.o include/freetype/src/cff/cff.o \
+	include/freetype/src/psaux/psaux.o include/freetype/src/psnames/psnames.o \
+	include/freetype/src/pshinter/pshinter.o include/freetype/src/smooth/smooth.o \
+	include/freetype/src/sdf/sdf.o include/freetype/src/autofit/autofit.o \
+	include/freetype/src/gzip/ftgzip.o
+FONTSYS_FT_LIB = libs/fontsys/libfontsys_freetype.a
+FONTSYS_CPPFLAGS = -I libs/fontsys -I include/freetype/include -D FT2_BUILD_LIBRARY -D FT_CONFIG_MODULES_H=\"ftmodule.h\"
+
 LIB = ${PCRE} ${RUNTIME} ${STD}
 
 BOOT = src/_main.o
@@ -159,6 +176,10 @@ ssl_LDLIBS += -lcrypt32 -lbcrypt -lws2_32
 mysql_LDLIBS += -lws2_32 -lwsock32
 endif
 
+FONTSYS += libs/fontsys/fontsys_find_win.o
+fontsys_LDFLAGS = -Wl,--exclude-libs,ALL
+fontsys_LDLIBS = -ldwrite
+
 else ifeq ($(UNAME),Darwin)
 
 # Mac
@@ -186,6 +207,8 @@ sdl_LDLIBS = -lSDL3 -framework OpenGL
 openal_LDFLAGS = -L$(BREW_OPENAL_PREFIX)/lib
 openal_LDLIBS = -lopenal
 ssl_LDLIBS += -framework Security -framework CoreFoundation
+FONTSYS += libs/fontsys/fontsys_find_apple.o
+fontsys_LDLIBS = -framework CoreText -framework CoreFoundation
 RELEASE_NAME = osx
 
 # Mac native debug
@@ -223,6 +246,9 @@ SDL_CPPFLAGS = $(shell pkg-config --cflags sdl3)
 sdl_LDFLAGS = $(shell pkg-config --libs-only-L --libs-only-other sdl3)
 sdl_LDLIBS = $(shell pkg-config --libs-only-l sdl3) -lGL
 openal_LDLIBS = -lopenal
+FONTSYS += libs/fontsys/fontsys_find_linux.o
+fontsys_LDFLAGS = -Wl,--exclude-libs,ALL
+fontsys_LDLIBS = -lfontconfig
 RELEASE_NAME = linux
 
 endif
@@ -315,6 +341,14 @@ heaps_LDLIBS = -ldl
 heaps.hdll: HDLL_LINK = $(CXX) $(LDFLAGS)
 heaps.hdll: $(HEAPS) $(LIBHL)
 
+$(FONTSYS) $(FONTSYS_FT): CPPFLAGS += $(FONTSYS_CPPFLAGS)
+$(FONTSYS_FT_LIB): $(FONTSYS_FT)
+	$(AR) rcs $@ $^
+ifeq ($(OS),Windows_NT)
+fontsys.hdll: HDLL_LINK = $(CXX) $(LDFLAGS)
+endif
+fontsys.hdll: $(FONTSYS) $(FONTSYS_FT_LIB) $(LIBHL)
+
 mesa:
 	(cd libs/mesa && ${MAKE})
 
@@ -388,11 +422,11 @@ codesign_osx:
 .SUFFIXES:
 .SUFFIXES: .cpp .c .o
 
-ALL_OBJS = ${STD} ${BOOT} ${RUNTIME} ${PCRE} ${HL_OBJ} ${FMT} ${SDL} ${SSL} ${OPENAL} ${UI} ${UV} ${MYSQL} ${SQLITE} ${HEAPS} ${HL_DEBUG}
+ALL_OBJS = ${STD} ${BOOT} ${RUNTIME} ${PCRE} ${HL_OBJ} ${FMT} ${SDL} ${SSL} ${OPENAL} ${UI} ${UV} ${MYSQL} ${SQLITE} ${HEAPS} ${FONTSYS} ${FONTSYS_FT} ${HL_DEBUG}
 DEPS = $(ALL_OBJS:.o=.d)
 
 clean_o:
-	rm -f ${ALL_OBJS} ${DEPS}
+	rm -f ${ALL_OBJS} ${DEPS} ${FONTSYS_FT_LIB}
 
 clean: clean_o
 	rm -f $(HL) $(HLC) $(LIBHL) *.hdll

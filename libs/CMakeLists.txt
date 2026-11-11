@@ -61,6 +61,11 @@ if(WITH_FMT)
     add_subdirectory(fmt)
 endif()
 
+option(WITH_FONTSYS "Build fontsys.hdll." ON)
+if(WITH_FONTSYS)
+    add_subdirectory(fontsys)
+endif()
+
 # add_subdirectory(mesa)
 
 option(WITH_OPENAL "Build openal.hdll." ON)

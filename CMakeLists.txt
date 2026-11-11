@@ -309,6 +309,27 @@ if(BUILD_TESTING)
     )
 
     #####################
+    # fontsys.hl (libs/fontsys/test/NativeTest.hx, needs fontsys.hdll)
+
+    if (WITH_FONTSYS)
+        set(FONTSYS_DIR ${CMAKE_SOURCE_DIR}/libs/fontsys)
+        add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/fontsys.hl
+            COMMAND ${HAXE_COMPILER}
+                ${HAXE_HL_FLAGS}
+                -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/fontsys.hl
+                -cp ${FONTSYS_DIR} -cp ${FONTSYS_DIR}/test -main NativeTest
+            DEPENDS
+                ${FONTSYS_DIR}/test/NativeTest.hx
+                ${FONTSYS_DIR}/fontsys/FontSys.hx
+                ${FONTSYS_DIR}/fontsys/FontStyle.hx
+                ${FONTSYS_DIR}/fontsys/SdfGlyph.hx
+        )
+        add_custom_target(fontsys.hl ALL
+            DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/fontsys.hl
+        )
+    endif()
+
+    #####################
     # hello.c
 
     add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello/hello.c
@@ -413,6 +434,15 @@ if(BUILD_TESTING)
         add_test(NAME uvsample.hl
             COMMAND hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample.hl 6001
         )
+        if (WITH_FONTSYS)
+            add_test(NAME fontsys.hl
+                COMMAND hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/fontsys.hl
+            )
+            set_tests_properties(fontsys.hl
+                PROPERTIES
+                PASS_REGULAR_EXPRESSION "NativeTest: all passed"
+            )
+        endif()
     endif()
 
     add_test(NAME hello

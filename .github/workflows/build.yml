@@ -150,12 +150,21 @@ jobs:
             sudo apt-get install --no-install-recommends -y \
               libmbedtls-dev${SUFFIX} \
               libopenal-dev${SUFFIX} \
+              libfontconfig1-dev${SUFFIX} \
               libpng-dev${SUFFIX} \
               libturbojpeg-dev${SUFFIX} \
               libuv1-dev${SUFFIX} \
               libvorbis-dev${SUFFIX} \
               libsqlite3-dev${SUFFIX} \
               ${EXTRA_APT_PKGS}
+
+            if [[ "${{ matrix.build_system }}" == cmake* ]]; then
+              # The fontsys CTests look up CJK fallback faces through fontconfig.
+              # Fonts are arch-independent, so no ${SUFFIX}.
+              sudo apt-get install --no-install-recommends -y \
+                fonts-noto-cjk \
+                fonts-dejavu-core
+            fi
 
             # ref https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
             sudo apt-get install --no-install-recommends -y \
