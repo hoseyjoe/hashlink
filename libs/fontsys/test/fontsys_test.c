@@ -344,6 +344,21 @@ static void test_color_emoji(void) {
         check_color_pixels(px, &g);
     }
     if (!flags_font || !*flags_font) flags_font = "/system/fonts/NotoColorEmojiFlags.ttf";
+    {
+        /* The app finds a flag's font from its first regional indicator: that face must be a
+           colour font that joins the pair, or the flag draws as two letters. */
+        static const unsigned gb[] = {0x1F1EC, 0x1F1E7};
+        fontsys_style regular = {400, 0, 0};
+        char path[PATH_CAP];
+        int index = 0, face;
+        CHECK(fontsys_find(ctx, 0x1F1EC, "en", &regular, path, PATH_CAP, &index) == 1);
+        face = fontsys_face_open(ctx, path, index);
+        CHECK(face >= 0);
+        if (face >= 0) {
+            CHECK(fontsys_face_is_color(ctx, face) == 1);
+            CHECK(shape(ctx, face, gb, 2, &glyph) == 1);
+        }
+    }
 #endif
     if (flags_font && *flags_font) check_flags_font(ctx, flags_font, px, sizeof(px));
     (void)emoji; (void)text; (void)plain; (void)g;
