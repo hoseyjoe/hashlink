@@ -44,7 +44,12 @@ class FallbackAtlas {
 		loopEvent.isBlocking = false;
 	}
 
-	/** A tile (dx = dy = 0) for `g`'s bitmap, or null if the atlas is full or disposed. **/
+	/**
+		A tile (dx = dy = 0) for `g`'s bitmap, or null if the atlas is full or disposed
+		or the glyph is larger than a page. A zero-size glyph (width or height 0) gets a
+		0x0 tile on the current page; it writes no pixels and takes no packer space
+		beyond the 1 px gutter.
+	**/
 	public function place(g:SdfGlyph):Null<h2d.Tile> {
 		if (disposed)
 			return null;
@@ -104,6 +109,12 @@ class FallbackAtlas {
 			}
 		}
 		p.dirty = true;
+		// A page already on the GPU would otherwise show the old pixels until the next
+		// flush, but h2d.Text lays out and draws after flush has run this frame. Free the
+		// GPU copy (realloc stays set) so the next bind re-uploads the whole CPU copy.
+		// Once disposed it stays so until re-uploaded: many placements cost one upload.
+		if (@:privateAccess p.tex.t != null)
+			p.tex.dispose();
 		return h2d.Tile.fromTexture(p.tex).sub(x, y, w, h);
 	}
 
@@ -113,8 +124,11 @@ class FallbackAtlas {
 		p.tex = new h3d.mat.Texture(pageSize, pageSize, [NoAlloc], RGBA);
 		p.tex.filter = Linear;
 		p.tex.realloc = function() {
-			if (p.pixels != null)
-				p.tex.uploadPixels(p.pixels);
+			if (p.pixels == null)
+				return;
+			p.tex.uploadPixels(p.pixels);
+			p.dirty = false;
+			uploads++;
 		};
 		pages.push(p);
 		pageCount = pages.length;

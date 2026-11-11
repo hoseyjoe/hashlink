@@ -102,6 +102,19 @@ class HeapsTest extends hxd.App {
 		check((px2 >>> 24) == 173, 'alpha after context loss is 173 (got ${px2 >>> 24})');
 		check(((px2 >> 16) & 0xFF) == 255, 'RGB after context loss is 255');
 
+		// Placing on a page that is already on the GPU is visible at once (no flush, no frame).
+		var e = new FallbackAtlas(256, 2);
+		var e1 = e.place(glyph(30, 30, 100));
+		e.flush();
+		var e2 = e.place(glyph(30, 30, 222));
+		var ep = e1.getTexture().capturePixels().getPixel(Std.int(e2.x) + 15, Std.int(e2.y) + 15);
+		check((ep >>> 24) == 222, 'glyph placed on a live page is readable at once (got ${ep >>> 24})');
+		var ep1 = e1.getTexture().capturePixels().getPixel(Std.int(e1.x) + 15, Std.int(e1.y) + 15);
+		check((ep1 >>> 24) == 100, 'earlier glyph survives the re-upload (got ${ep1 >>> 24})');
+		var z = e.place(glyph(0, 0, 0));
+		check(z != null && z.width == 0 && z.height == 0, 'zero-size glyph gets a 0x0 tile');
+		e.dispose();
+
 		// dispose: later place returns null.
 		d.dispose();
 		check(d.place(glyph(10, 10, 1)) == null, 'place after dispose returns null');
