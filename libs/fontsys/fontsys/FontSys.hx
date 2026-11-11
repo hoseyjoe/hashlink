@@ -88,6 +88,58 @@ class FontSys {
 		return g;
 	}
 
+	/** Whether the face has colour glyphs (an emoji font: COLR layers or colour bitmaps). **/
+	public function faceIsColor(face:Int):Bool {
+		return face_is_color(ctx, face);
+	}
+
+	/**
+		The glyph id HarfBuzz shapes the code points `codes` to in `face` when that is exactly one
+		glyph (an emoji sequence the font joins), else 0.
+	**/
+	public function shapeCluster(face:Int, codes:Array<Int>):Int {
+		if (codes == null || codes.length == 0)
+			return 0;
+		var b = new hl.Bytes(codes.length * 4);
+		for (i in 0...codes.length)
+			b.setI32(i * 4, codes[i]);
+		var glyph = 0;
+		return shape_cluster(ctx, face, b, codes.length, glyph) == 1 ? glyph : 0;
+	}
+
+	/**
+		Renders the glyph id `glyph` of `face` in colour with one em = `em` pixels, or null if it has
+		no colour image (an outline glyph, or a bitmap font this build cannot decode).
+	**/
+	public function renderColor(face:Int, glyph:Int, em:Int):Null<ColorGlyph> {
+		if (buf == null) {
+			bufCap = INITIAL_BUFFER;
+			buf = new hl.Bytes(bufCap);
+		}
+		var width = 0, height = 0, left = 0, top = 0, advance = 0.;
+		var r = render_color(ctx, face, glyph, em, buf, bufCap, width, height, left, top, advance);
+		if (r == -1) {
+			var need = width * height * 4;
+			while (bufCap < need)
+				bufCap <<= 1;
+			buf = new hl.Bytes(bufCap);
+			r = render_color(ctx, face, glyph, em, buf, bufCap, width, height, left, top, advance);
+		}
+		if (r != 1)
+			return null;
+		var g = new ColorGlyph();
+		g.width = width;
+		g.height = height;
+		g.left = left;
+		g.top = top;
+		g.advance = advance;
+		var n = width * height * 4;
+		g.pixels = haxe.io.Bytes.alloc(n);
+		if (n > 0)
+			@:privateAccess g.pixels.b.blit(0, buf, 0, n);
+		return g;
+	}
+
 	/** Frees the native context and every face; the object is unusable afterwards. **/
 	public function dispose():Void {
 		if (ctx != null) {
@@ -114,6 +166,19 @@ class FontSys {
 
 	@:hlNative("?fontsys", "hl_face_has") static function face_has(ctx:Ctx, face:Int, code:Int):Bool {
 		return false;
+	}
+
+	@:hlNative("?fontsys", "hl_face_is_color") static function face_is_color(ctx:Ctx, face:Int):Bool {
+		return false;
+	}
+
+	@:hlNative("?fontsys", "hl_shape_cluster") static function shape_cluster(ctx:Ctx, face:Int, cps:hl.Bytes, n:Int, glyph:hl.Ref<Int>):Int {
+		return -2;
+	}
+
+	@:hlNative("?fontsys", "hl_render_color") static function render_color(ctx:Ctx, face:Int, glyph:Int, em:Int, buf:hl.Bytes, bufCap:Int,
+		width:hl.Ref<Int>, height:hl.Ref<Int>, left:hl.Ref<Int>, top:hl.Ref<Int>, advance:hl.Ref<Float>):Int {
+		return -2;
 	}
 
 	@:hlNative("?fontsys", "hl_render_sdf") static function render_sdf(ctx:Ctx, face:Int, code:Int, em:Int, spread:Int, buf:hl.Bytes,

@@ -93,6 +93,41 @@ HL_PRIM int HL_NAME(hl_render_sdf)(fontsys_hl_ctx *h, int face, int cp, int em_p
 	return r;
 }
 
+HL_PRIM bool HL_NAME(hl_face_is_color)(fontsys_hl_ctx *h, int face) {
+	return fontsys_face_is_color(get_ctx(h), face) == 1;
+}
+
+/* fontsys_shape_cluster over n code points passed as int32 bytes. Returns 1
+   with *glyph set when they shape to one glyph, 0 if not, <0 on error. */
+HL_PRIM int HL_NAME(hl_shape_cluster)(fontsys_hl_ctx *h, int face, vbyte *cps, int n, int *glyph) {
+	unsigned g = 0;
+	int r;
+	*glyph = 0;
+	if (!cps || n <= 0) return -2;
+	r = fontsys_shape_cluster(get_ctx(h), face, (const unsigned *)cps, n, &g);
+	if (r == 1) *glyph = (int)g;
+	return r;
+}
+
+/* fontsys_render_color with the metrics returned through refs. Returns 1 ok
+   (RGBA, straight alpha), 0 no colour image, -1 buf too small (width/height
+   still set), <0 error. */
+HL_PRIM int HL_NAME(hl_render_color)(fontsys_hl_ctx *h, int face, int glyph, int em_px, vbyte *buf,
+                                     int buf_cap, int *width, int *height, int *left, int *top,
+                                     double *advance) {
+	fontsys_glyph g;
+	int r;
+	memset(&g, 0, sizeof(g));
+	r = fontsys_render_color(get_ctx(h), face, (unsigned)glyph, em_px, (unsigned char *)buf,
+	                         buf ? buf_cap : 0, &g);
+	*width = g.width;
+	*height = g.height;
+	*left = g.left;
+	*top = g.top;
+	*advance = g.advance;
+	return r;
+}
+
 #define _CTX _ABSTRACT(fontsys_hl_ctx)
 
 DEFINE_PRIM(_CTX, hl_create, _NO_ARG);
@@ -101,3 +136,6 @@ DEFINE_PRIM(_BYTES, hl_find, _CTX _I32 _BYTES _I32 _BOOL _BOOL _REF(_I32));
 DEFINE_PRIM(_I32, hl_face_open, _CTX _BYTES _I32);
 DEFINE_PRIM(_BOOL, hl_face_has, _CTX _I32 _I32);
 DEFINE_PRIM(_I32, hl_render_sdf, _CTX _I32 _I32 _I32 _I32 _BYTES _I32 _REF(_I32) _REF(_I32) _REF(_I32) _REF(_I32) _REF(_F64));
+DEFINE_PRIM(_BOOL, hl_face_is_color, _CTX _I32);
+DEFINE_PRIM(_I32, hl_shape_cluster, _CTX _I32 _BYTES _I32 _REF(_I32));
+DEFINE_PRIM(_I32, hl_render_color, _CTX _I32 _I32 _I32 _BYTES _I32 _REF(_I32) _REF(_I32) _REF(_I32) _REF(_I32) _REF(_F64));

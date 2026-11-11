@@ -1,3 +1,4 @@
+import fontsys.ColorGlyph;
 import fontsys.FontStyle;
 import fontsys.SdfGlyph;
 import fontsys.heaps.FallbackAtlas;
@@ -28,6 +29,10 @@ class FakeSource implements GlyphSource {
 		g.pixels = haxe.io.Bytes.alloc(40 * 44);
 		g.pixels.fill(0, 40 * 44, 200);
 		return g;
+	}
+
+	public function colorGlyph(codes:Array<Int>, lang:String, style:FontStyle, em:Int):Null<ColorGlyph> {
+		return null;
 	}
 }
 
@@ -65,6 +70,73 @@ class HeapsTest extends hxd.App {
 		g.pixels = haxe.io.Bytes.alloc(w * h);
 		g.pixels.fill(0, w * h, v);
 		return g;
+	}
+
+	/** A w x h colour glyph filled with the RGBA colour `rgba` (0xRRGGBBAA). **/
+	static function colorGlyph(w:Int, h:Int, rgba:Int):ColorGlyph {
+		var g = new ColorGlyph();
+		g.width = w;
+		g.height = h;
+		g.left = 0;
+		g.top = h;
+		g.advance = w;
+		g.pixels = haxe.io.Bytes.alloc(w * h * 4);
+		for (i in 0...w * h) {
+			g.pixels.set(i * 4, (rgba >>> 24) & 0xFF);
+			g.pixels.set(i * 4 + 1, (rgba >>> 16) & 0xFF);
+			g.pixels.set(i * 4 + 2, (rgba >>> 8) & 0xFF);
+			g.pixels.set(i * 4 + 3, rgba & 0xFF);
+		}
+		return g;
+	}
+
+	/** True when the tile's region of its texture has an opaque, clearly coloured (not grey) pixel. **/
+	static function hasColour(t:h2d.Tile):Bool {
+		var px = t.getTexture().capturePixels();
+		for (y in Std.int(t.y)...Std.int(t.y + t.height))
+			for (x in Std.int(t.x)...Std.int(t.x + t.width)) {
+				var p = px.getPixel(x, y); // ARGB
+				var r = (p >> 16) & 0xFF, b = p & 0xFF;
+				if ((p >>> 24) > 200 && Math.abs(r - b) > 60)
+					return true;
+			}
+		return false;
+	}
+
+	/** Colour pages: separate from SDF pages, capped, RGBA kept as given, survive a lost context. **/
+	static function colorAtlasTests() {
+		var logs:Array<String> = [];
+		var oldTrace = haxe.Log.trace;
+		haxe.Log.trace = function(v:Dynamic, ?p) logs.push(Std.string(v));
+		var a = new FallbackAtlas(256, 2, 1);
+		var s = a.place(glyph(10, 10, 1));
+		var c = a.placeColor(colorGlyph(64, 64, 0x2060C0FF));
+		check(c != null, 'colour glyph placed');
+		check(c != null && c.getTexture() != s.getTexture(), 'colour glyph on its own page, not an SDF page');
+		check(a.colorPageCount == 1, 'one colour page (got ${a.colorPageCount})');
+		check(a.pageCount == 1, 'SDF page count unchanged by colour glyphs (got ${a.pageCount})');
+		var placed = 1, nulls = 0;
+		try {
+			for (i in 0...20) {
+				if (a.placeColor(colorGlyph(64, 64, 0xFF0000FF)) != null) placed++ else nulls++;
+			}
+		} catch (e:Dynamic) {
+			check(false, 'exception while filling capped colour pages: $e');
+		}
+		haxe.Log.trace = oldTrace;
+		check(placed == 9 && nulls == 12, 'colour atlas cap: a 256 px page holds 9 glyphs of 64 px, the rest null (placed $placed, null $nulls)');
+		check(a.colorPageCount == 1, 'capped at one colour page (got ${a.colorPageCount})');
+		var full = [for (l in logs) if (l.indexOf("FallbackAtlas: colour pages full") >= 0) l];
+		check(full.length == 1, 'colour pages full logged once (got ${full.length}: $logs)');
+		a.flush();
+		var tex = c.getTexture();
+		var px = tex.capturePixels().getPixel(Std.int(c.x) + 32, Std.int(c.y) + 32);
+		check(px == 0xFF2060C0, 'colour pixel kept as given (got ${StringTools.hex(px, 8)})');
+		tex.dispose();
+		var px2 = tex.capturePixels().getPixel(Std.int(c.x) + 32, Std.int(c.y) + 32);
+		check(px2 == 0xFF2060C0, 'colour page restored after context loss (got ${StringTools.hex(px2, 8)})');
+		a.dispose();
+		check(a.placeColor(colorGlyph(8, 8, 0xFFFFFFFF)) == null, 'placeColor after dispose returns null');
 	}
 
 	static function overlap(a:h2d.Tile, b:h2d.Tile):Bool {
@@ -249,20 +321,51 @@ class HeapsTest extends hxd.App {
 		check(Math.abs(zhBottom - aBottom) <= 0.2 * 48, 'U+4E2D bottom $zhBottom within 0.2 em of A bottom $aBottom');
 		Sys.println('A bottom $aBottom, U+4E2D bottom $zhBottom (dy ${zh.t.dy}, h ${zh.t.height}, w ${zh.t.width}), advance ${zh.width}');
 
-		// An emoji (a surrogate pair, then U+FE0F) is one glyph, and on Windows a real one: Segoe UI
-		// Emoji's monochrome outline. Elsewhere it may be the box (Android's emoji font is bitmaps).
+		// An emoji (a surrogate pair, then U+FE0F) is one glyph; on Windows a colour one from Segoe
+		// UI Emoji, on the colour layer.
 		var et = new h2d.Text(textFont, s2d);
 		et.text = "A\u{1F600}\u{FE0F}B";
 		@:privateAccess et.updateSize();
 		var count = @:privateAccess et.glyphs.count();
-		check(count == 3, '"A😀️B" draws 3 glyphs (got $count)');
+		var colorLayer = @:privateAccess et.colorGlyphs;
+		var colorCount = colorLayer == null ? 0 : colorLayer.count();
+		check(count + colorCount == 3, '"A😀️B" draws 3 glyphs (got $count + $colorCount)');
 		var grin = textFont.getChar(0x1F600);
 		if (grin != defaultChar(textFont))
-			Sys.println('U+1F600 from: ${src.lastFacePath} (w ${grin.t.width}, h ${grin.t.height}, advance ${grin.width})');
-		if (Sys.systemName() == "Windows")
+			Sys.println('U+1F600 from: ${src.lastFacePath} (w ${grin.t.width}, h ${grin.t.height}, advance ${grin.width}, colour ${grin.isColor})');
+		if (Sys.systemName() == "Windows") {
 			check(grin != defaultChar(textFont), 'U+1F600 resolved from an OS font');
+			check(count == 2 && colorCount == 1, '"A😀️B": 2 text glyphs, 1 colour glyph (got $count, $colorCount)');
+			colorChecks(zh);
+		}
 		et.remove();
 		textAtlas.dispose();
+	}
+
+	/** Windows: Segoe UI Emoji gives colour glyphs, joined by HarfBuzz, on colour pages. **/
+	function colorChecks(zh:h2d.Font.FontChar) {
+		var grin = textFont.getChar(0x1F600);
+		check(grin.isColor, 'U+1F600 is a colour glyph');
+		var thumb = textFont.getCluster("\u{1F44D}\u{1F3FD}", 0, 4);
+		check(thumb != null && thumb.isColor, 'thumb + skin tone is one colour glyph');
+		if (thumb != null) {
+			var tex = thumb.t.getTexture();
+			check(tex != textFont.tile.getTexture() && tex != zh.t.getTexture(), 'the colour glyph is on a colour page');
+			textAtlas.flush();
+			check(hasColour(thumb.t), 'the thumb is drawn in colour');
+			// size: a 48 px font's emoji is about 48 px tall, sitting on the baseline
+			check(thumb.t.height > 30 && thumb.t.height < 70, 'thumb height ${thumb.t.height} near the 48 px em');
+			check(thumb.width > 30 && thumb.width < 70, 'thumb advance ${thumb.width} near the 48 px em');
+		}
+		var keycap = textFont.getCluster("1\u{FE0F}\u{20E3}", 0, 3);
+		check(keycap != null && keycap.isColor, 'keycap 1 is a colour glyph');
+		check(!zh.isColor, 'U+4E2D stays an SDF glyph');
+		var ct = new h2d.Text(textFont, s2d);
+		ct.text = "A\u{1F44D}\u{1F3FD}\u{1F469}\u{200D}\u{1F4BB}B";
+		@:privateAccess ct.updateSize();
+		var tc = @:privateAccess ct.glyphs.count(), cc = @:privateAccess ct.colorGlyphs.count();
+		check(tc == 2 && cc == 2, '"A👍🏽👩‍💻B": 2 text glyphs, 2 colour glyphs (got $tc, $cc)');
+		ct.remove();
 	}
 
 	override function init() {
@@ -270,6 +373,7 @@ class HeapsTest extends hxd.App {
 
 		fallbackFakeTests();
 		fallbackCapTest();
+		colorAtlasTests();
 
 		// Review Focus 3: h2d.Text mixing page / atlas / page glyphs, real source.
 		textAtlas = new FallbackAtlas(1024, 2);
