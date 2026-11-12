@@ -182,6 +182,18 @@ HL_PRIM int HL_NAME(event_poll)( SDL_Event *e ) {
 	return SDL_PollEvent(e);
 }
 
+// Sizes and mouse positions cross this binding in pixels, as heaps draws in them. SDL speaks
+// window coordinates, which on a high pixel density window (macOS Retina: see win_create_ex)
+// are points, density pixels each; elsewhere the density is 1 and these change nothing.
+static float win_density( SDL_Window *win ) {
+	float d = win ? SDL_GetWindowPixelDensity(win) : 0;
+	return d > 0 ? d : 1;
+}
+
+static float id_density( SDL_WindowID id ) {
+	return win_density(SDL_GetWindowFromID(id));
+}
+
 HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 	while (true) {
 		SDL_Event e;
@@ -207,6 +219,8 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 				event->state = Move;
 				break;
 			case SDL_EVENT_WINDOW_RESIZED:
+			// the window moved to a display of another pixel density: same points, other pixels
+			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 				event->state = Resize;
 				break;
 			case SDL_EVENT_WINDOW_MINIMIZED:
@@ -247,10 +261,13 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 		case SDL_EVENT_MOUSE_MOTION:
 			event->type = MouseMove;
 			event->window = e.motion.windowID;
-			event->mouseX = e.motion.x;
-			event->mouseY = e.motion.y;
-			event->mouseXRel = e.motion.xrel;
-			event->mouseYRel = e.motion.yrel;
+			{
+				float d = id_density(e.motion.windowID);
+				event->mouseX = e.motion.x * d;
+				event->mouseY = e.motion.y * d;
+				event->mouseXRel = e.motion.xrel * d;
+				event->mouseYRel = e.motion.yrel * d;
+			}
 			break;
 		case SDL_EVENT_KEY_DOWN:
 			event->type = KeyDown;
@@ -269,15 +286,21 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			event->type = MouseDown;
 			event->window = e.button.windowID;
 			event->button = e.button.button;
-			event->mouseX = e.button.x;
-			event->mouseY = e.button.y;
+			{
+				float d = id_density(e.button.windowID);
+				event->mouseX = e.button.x * d;
+				event->mouseY = e.button.y * d;
+			}
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_UP:
 			event->type = MouseUp;
 			event->window = e.button.windowID;
 			event->button = e.button.button;
-			event->mouseX = e.button.x;
-			event->mouseY = e.button.y;
+			{
+				float d = id_density(e.button.windowID);
+				event->mouseX = e.button.x * d;
+				event->mouseY = e.button.y * d;
+			}
 			break;
 		case SDL_EVENT_FINGER_DOWN:
 			event->type = TouchDown;
@@ -580,7 +603,8 @@ HL_PRIM int HL_NAME(warp_mouse_global)(int x, int y) {
 }
 
 HL_PRIM void HL_NAME(warp_mouse_in_window)(SDL_Window* window, int x, int y) {
-	SDL_WarpMouseInWindow(window, x, y);
+	float d = win_density(window);
+	SDL_WarpMouseInWindow(window, x / d, y / d);
 }
 
 // SDL2 compat: Check emulated `SDL_HINT_GRAB_KEYBOARD` hint
@@ -684,6 +708,12 @@ HL_PRIM SDL_Window *HL_NAME(win_create_ex)(int x, int y, int width, int height, 
 		SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_MAXIMIZED_BOOLEAN, true);
 	if( sdlFlags & SDL_WINDOW_MOUSE_FOCUS )
 		SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_MOUSE_GRABBED_BOOLEAN, true);
+#ifdef HL_MAC
+	// Always on a Mac: without it a Retina display gets a framebuffer of one pixel per point,
+	// stretched to twice the size - everything drawn soft. width and height stay in points here
+	// (the window is as large on screen either way); every size after creation is in pixels.
+	sdlFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
 	if( sdlFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY )
 		SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
 	if( sdlFlags & SDL_WINDOW_ALWAYS_ON_TOP )
@@ -820,15 +850,18 @@ HL_PRIM void HL_NAME(win_set_size)(SDL_Window *win, int width, int height) {
 	if( flags & SDL_WINDOW_MAXIMIZED ) {
 		SDL_RestoreWindow(win);
 	}
-	SDL_SetWindowSize(win, width, height);
+	float d = win_density(win);
+	SDL_SetWindowSize(win, (int)(width / d), (int)(height / d));
 }
 
 HL_PRIM void HL_NAME(win_set_min_size)(SDL_Window *win, int width, int height) {
-	SDL_SetWindowMinimumSize(win, width, height);
+	float d = win_density(win);
+	SDL_SetWindowMinimumSize(win, (int)(width / d), (int)(height / d));
 }
 
 HL_PRIM void HL_NAME(win_set_max_size)(SDL_Window *win, int width, int height) {
-	SDL_SetWindowMaximumSize(win, width, height);
+	float d = win_density(win);
+	SDL_SetWindowMaximumSize(win, (int)(width / d), (int)(height / d));
 }
 
 HL_PRIM void HL_NAME(win_set_maximized)(SDL_Window* win, bool maximize) {
@@ -845,15 +878,21 @@ HL_PRIM bool HL_NAME(win_maximized)(SDL_Window* win) {
 }
 
 HL_PRIM void HL_NAME(win_get_size)(SDL_Window *win, int *width, int *height) {
-	SDL_GetWindowSize(win, width, height);
+	SDL_GetWindowSizeInPixels(win, width, height);
 }
 
 HL_PRIM void HL_NAME(win_get_min_size)(SDL_Window *win, int *width, int *height) {
+	float d = win_density(win);
 	SDL_GetWindowMinimumSize(win, width, height);
+	if( width ) *width = (int)(*width * d);
+	if( height ) *height = (int)(*height * d);
 }
 
 HL_PRIM void HL_NAME(win_get_max_size)(SDL_Window *win, int *width, int *height) {
+	float d = win_density(win);
 	SDL_GetWindowMaximumSize(win, width, height);
+	if( width ) *width = (int)(*width * d);
+	if( height ) *height = (int)(*height * d);
 }
 
 HL_PRIM double HL_NAME(win_get_display_scale)(SDL_Window *win) {
