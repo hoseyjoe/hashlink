@@ -131,6 +131,9 @@ elseif(DOWNLOAD_DEPENDENCIES)
     set(BUILD_SHARED_LIBS OFF)
     set(ENABLE_PROGRAMS OFF CACHE INTERNAL "")
     set(ENABLE_TESTING OFF CACHE INTERNAL "")
+    # PSA crypto is only thread-safe with the threading layer, which the default configuration
+    # leaves out: see the file. Mbed TLS hands it on to every target that links these libraries.
+    set(TF_PSA_CRYPTO_USER_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/tf_psa_crypto_user_config.h" CACHE FILEPATH "" FORCE)
     FetchContent_MakeAvailable(mbedtls-project)
     set(BUILD_SHARED_LIBS ${_OLD_BUILD_SHARED_LIBS})
     set(MBEDTLS_LIBRARIES MbedTLS::mbedtls MbedTLS::mbedx509 TF-PSA-Crypto::tfpsacrypto)
