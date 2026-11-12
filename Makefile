@@ -221,6 +221,9 @@ openal_LDLIBS = -lopenal
 ssl_LDLIBS += -framework Security -framework CoreFoundation
 FONTSYS += libs/fontsys/fontsys_find_apple.o
 FONTSYS_FT += $(FONTSYS_PNG)
+# libpng 1.6.26 is kept unmodified: on a Mac its pngpriv.h includes the classic
+# Mac OS <fp.h>, which no SDK has, unless <math.h> came first.
+FONTSYS_PNG_CFLAGS = -include math.h
 FONTSYS_CPPFLAGS += $(FONTSYS_PNG_CPPFLAGS)
 fontsys_LDLIBS = -framework CoreText -framework CoreFoundation -lz
 RELEASE_NAME = osx
@@ -363,7 +366,7 @@ $(FONTSYS_FT_LIB): $(FONTSYS_FT)
 # .SUFFIXES below has no .cc: an explicit rule for the HarfBuzz amalgamation.
 include/harfbuzz/src/harfbuzz.o: include/harfbuzz/src/harfbuzz.cc
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -D HAVE_FREETYPE=1 -D HB_LEAN -Os -fno-exceptions -fno-rtti -fvisibility=hidden -fvisibility-inlines-hidden -c $< -o $@
-$(FONTSYS_PNG): CFLAGS += -fvisibility=hidden
+$(FONTSYS_PNG): CFLAGS += -fvisibility=hidden $(FONTSYS_PNG_CFLAGS)
 # HarfBuzz is C++.
 fontsys.hdll: HDLL_LINK = $(CXX) $(LDFLAGS)
 fontsys.hdll: $(FONTSYS) $(FONTSYS_FT_LIB) $(LIBHL)

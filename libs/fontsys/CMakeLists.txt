@@ -143,8 +143,14 @@ else()
     set_source_files_properties(${HARFBUZZ_SOURCES} PROPERTIES
         COMPILE_OPTIONS "-Os;-fno-exceptions;-fno-rtti;-fvisibility=hidden;-fvisibility-inlines-hidden"
     )
+    set(FONTSYS_PNG_OPTIONS -fvisibility=hidden)
+    if(APPLE)
+        # libpng 1.6.26 is kept unmodified: on a Mac its pngpriv.h includes the
+        # classic Mac OS <fp.h>, which no SDK has, unless <math.h> came first.
+        list(APPEND FONTSYS_PNG_OPTIONS -include math.h)
+    endif()
     set_source_files_properties(${FONTSYS_PNG_SOURCES} PROPERTIES
-        COMPILE_OPTIONS "-fvisibility=hidden"
+        COMPILE_OPTIONS "${FONTSYS_PNG_OPTIONS}"
     )
 endif()
 
