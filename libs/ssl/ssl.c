@@ -82,6 +82,17 @@ static int ssl_block_error( int r ) {
 	return is_ssl_blocking(r) ? -1 : -2;
 }
 
+// A TLS 1.3 server sends session tickets after the handshake. Mbed TLS 4 (and 3.6 when asked to)
+// answers the read or write that meets one with this code, which is not an error: the call is to
+// be made again. Answered as an error it reads as the end of the stream to the caller.
+static bool is_ssl_ticket( int r ) {
+#ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+	return r == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET;
+#else
+	return false;
+#endif
+}
+
 static void cert_finalize(hl_ssl_cert *c) {
 	mbedtls_x509_crt_free(c->c);
 	free(c->c);
@@ -203,14 +214,15 @@ HL_PRIM int HL_NAME(ssl_send_char)(mbedtls_ssl_context *ssl, int c) {
 	unsigned char cc;
 	int r;
 	cc = (unsigned char)c;
-	r = mbedtls_ssl_write(ssl, &cc, 1);
+	do r = mbedtls_ssl_write(ssl, &cc, 1); while( is_ssl_ticket(r) );
 	if( r < 0 )
 		return ssl_block_error(r);
 	return 1;
 }
 
 HL_PRIM int HL_NAME(ssl_send)(mbedtls_ssl_context *ssl, vbyte *buf, int pos, int len) {
-	int r = mbedtls_ssl_write(ssl, (const unsigned char *)buf + pos, len);
+	int r;
+	do r = mbedtls_ssl_write(ssl, (const unsigned char *)buf + pos, len); while( is_ssl_ticket(r) );
 	if( r < 0 ) 
 		return ssl_block_error(r);
 	return r;
@@ -218,14 +230,16 @@ HL_PRIM int HL_NAME(ssl_send)(mbedtls_ssl_context *ssl, vbyte *buf, int pos, int
 
 HL_PRIM int HL_NAME(ssl_recv_char)(mbedtls_ssl_context *ssl) {
 	unsigned char c;
-	int ret = mbedtls_ssl_read(ssl, &c, 1);
+	int ret;
+	do ret = mbedtls_ssl_read(ssl, &c, 1); while( is_ssl_ticket(ret) );
 	if( ret != 1 )
 		return ssl_block_error(ret);
 	return c;
 }
 
 HL_PRIM int HL_NAME(ssl_recv)(mbedtls_ssl_context *ssl, vbyte *buf, int pos, int len) {
-	int ret = mbedtls_ssl_read(ssl, (unsigned char*)buf+pos, len);
+	int ret;
+	do ret = mbedtls_ssl_read(ssl, (unsigned char*)buf+pos, len); while( is_ssl_ticket(ret) );
 	if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
 		return 0;
 	if( ret < 0 )
