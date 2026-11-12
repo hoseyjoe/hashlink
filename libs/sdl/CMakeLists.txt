@@ -56,7 +56,10 @@ if(ANDROID)
     target_link_libraries(sdl.hdll GLESv3)
 endif()
 
-if((APPLE OR UNIX) AND NOT ANDROID)
+if(IOS)
+    # GL ES is a framework there; FindOpenGL looks for the desktop one.
+    target_link_libraries(sdl.hdll "-framework OpenGLES")
+elseif((APPLE OR UNIX) AND NOT ANDROID)
     find_package(OpenGL REQUIRED)
     target_include_directories(sdl.hdll
         PRIVATE

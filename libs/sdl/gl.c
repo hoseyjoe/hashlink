@@ -32,6 +32,23 @@
 #	include <GL/glcorearb.h>
 #endif
 
+#include "ios_safe_area.h"
+#ifdef HL_IOS
+// The screen is the draw target (framebuffer 0 to Heaps), not a texture: see ios_safe_area.h.
+static bool ios_draws_to_screen = true;
+// Moves a rectangle Heaps gave in the safe area's GL coordinates (origin bottom left) to the
+// screen's.
+static void ios_to_screen( int *x, int *y ) {
+	int sx, sy, sw, sh, fullh;
+	if( !ios_draws_to_screen ) return;
+	hl_ios_safe_rect(SDL_GL_GetCurrentWindow(), &sx, &sy, &sw, &sh, &fullh);
+	*x += sx;
+	*y += fullh - (sy + sh);
+}
+#else
+#	define ios_to_screen(x,y)
+#endif
+
 #ifdef HL_GLES
 #	define GL_IMPORT(fun, t)
 #	define ES_NOT_SUPPORTED hl_error("Not supported by GLES3")
@@ -116,6 +133,7 @@ HL_PRIM int HL_NAME(gl_get_error)() {
 }
 
 HL_PRIM void HL_NAME(gl_scissor)( int x, int y, int width, int height ) {
+	ios_to_screen(&x, &y);
 	glScissor(x, y, width, height);
 }
 
@@ -132,6 +150,7 @@ HL_PRIM void HL_NAME(gl_clear_stencil)( int value ) {
 }
 
 HL_PRIM void HL_NAME(gl_viewport)( int x, int y, int width, int height ) {
+	ios_to_screen(&x, &y);
 	glViewport(x, y, width, height);
 }
 
@@ -438,12 +457,13 @@ HL_PRIM vdynamic *HL_NAME(gl_create_framebuffer)() {
 
 HL_PRIM void HL_NAME(gl_bind_framebuffer)( int target, vdynamic *f ) {
 	unsigned int id = ZIDX(f);
+#ifdef HL_IOS
+	if( target != GL_READ_FRAMEBUFFER ) ios_draws_to_screen = id == 0;
+#endif
 #if	defined(HL_IOS) || defined(HL_TVOS)
 	if ( id==0 ) {
-		SDL_SysWMinfo info;
-		SDL_VERSION(&info.version);
-		SDL_GetWindowWMInfo(SDL_GL_GetCurrentWindow(), &info);
-		id = info.info.uikit.framebuffer;
+		// SDL3: the view's framebuffer is a window property (SDL2's SDL_SysWMinfo is gone)
+		id = (unsigned int)SDL_GetNumberProperty(SDL_GetWindowProperties(SDL_GL_GetCurrentWindow()), SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER, 0);
 	}
 #endif
 	glBindFramebuffer(target, id);
@@ -490,10 +510,7 @@ HL_PRIM void HL_NAME(gl_bind_renderbuffer)( int target, vdynamic *r ) {
 	unsigned int id = ZIDX(r);
 #if	defined(HL_IOS) || defined(HL_TVOS)
 	if ( id==0 ) {
-		SDL_SysWMinfo info;
-		SDL_VERSION(&info.version);
-		SDL_GetWindowWMInfo(SDL_GL_GetCurrentWindow(), &info);
-		id = info.info.uikit.colorbuffer;
+		id = (unsigned int)SDL_GetNumberProperty(SDL_GetWindowProperties(SDL_GL_GetCurrentWindow()), SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER, 0);
 	}
 #endif
 	glBindRenderbuffer(GL_RENDERBUFFER, id);

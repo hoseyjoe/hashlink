@@ -194,6 +194,31 @@ static float id_density( SDL_WindowID id ) {
 	return win_density(SDL_GetWindowFromID(id));
 }
 
+#include "ios_safe_area.h"
+#ifdef HL_IOS
+// A position in the window's pixels, made relative to the safe area Heaps takes for the window.
+static void ios_from_screen( SDL_WindowID id, int *x, int *y ) {
+	int sx, sy, sw, sh;
+	hl_ios_safe_rect(SDL_GetWindowFromID(id), &sx, &sy, &sw, &sh, NULL);
+	*x -= sx;
+	*y -= sy;
+}
+// The same for a touch: SDL gives it as 0..1 of the whole window, Heaps wants 0..10000 of its own.
+static void ios_touch( SDL_WindowID id, float tx, float ty, int *x, int *y ) {
+	int sx, sy, sw, sh, pw = 0, ph = 0;
+	SDL_Window *win = SDL_GetWindowFromID(id);
+	if( !win ) { int n = 0; SDL_Window **all = SDL_GetWindows(&n); if( all ) { if( n > 0 ) win = all[0]; SDL_free(all); } }
+	hl_ios_safe_rect(win, &sx, &sy, &sw, &sh, NULL);
+	if( win ) SDL_GetWindowSizeInPixels(win, &pw, &ph);
+	if( sw <= 0 || sh <= 0 ) { *x = (int)(tx*10000); *y = (int)(ty*10000); return; }
+	*x = (int)((tx * pw - sx) * 10000 / sw);
+	*y = (int)((ty * ph - sy) * 10000 / sh);
+}
+#else
+#	define ios_from_screen(id,x,y)
+#	define ios_touch(id,tx,ty,x,y) (*(x) = (int)((tx)*10000), *(y) = (int)((ty)*10000))
+#endif
+
 HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 	while (true) {
 		SDL_Event e;
@@ -221,6 +246,10 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			case SDL_EVENT_WINDOW_RESIZED:
 			// the window moved to a display of another pixel density: same points, other pixels
 			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+#ifdef HL_IOS
+			// rotation moves the notch to another side: the size Heaps is shown changes
+			case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+#endif
 				event->state = Resize;
 				break;
 			case SDL_EVENT_WINDOW_MINIMIZED:
@@ -267,6 +296,7 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 				event->mouseY = e.motion.y * d;
 				event->mouseXRel = e.motion.xrel * d;
 				event->mouseYRel = e.motion.yrel * d;
+				ios_from_screen(e.motion.windowID, &event->mouseX, &event->mouseY);
 			}
 			break;
 		case SDL_EVENT_KEY_DOWN:
@@ -290,6 +320,7 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 				float d = id_density(e.button.windowID);
 				event->mouseX = e.button.x * d;
 				event->mouseY = e.button.y * d;
+				ios_from_screen(e.button.windowID, &event->mouseX, &event->mouseY);
 			}
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -300,24 +331,22 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 				float d = id_density(e.button.windowID);
 				event->mouseX = e.button.x * d;
 				event->mouseY = e.button.y * d;
+				ios_from_screen(e.button.windowID, &event->mouseX, &event->mouseY);
 			}
 			break;
 		case SDL_EVENT_FINGER_DOWN:
 			event->type = TouchDown;
-			event->mouseX = (int)(e.tfinger.x*10000);
-			event->mouseY = (int)(e.tfinger.y*10000);
+			ios_touch(e.tfinger.windowID, e.tfinger.x, e.tfinger.y, &event->mouseX, &event->mouseY);
 			event->reference = (int)e.tfinger.fingerID;
 			break;
 		case SDL_EVENT_FINGER_MOTION:
 			event->type = TouchMove;
-			event->mouseX = (int)(e.tfinger.x*10000);
-			event->mouseY = (int)(e.tfinger.y*10000);
+			ios_touch(e.tfinger.windowID, e.tfinger.x, e.tfinger.y, &event->mouseX, &event->mouseY);
 			event->reference = (int)e.tfinger.fingerID;
 			break;
 		case SDL_EVENT_FINGER_UP:
 			event->type = TouchUp;
-			event->mouseX = (int)(e.tfinger.x*10000);
-			event->mouseY = (int)(e.tfinger.y*10000);
+			ios_touch(e.tfinger.windowID, e.tfinger.x, e.tfinger.y, &event->mouseX, &event->mouseY);
 			event->reference = (int)e.tfinger.fingerID;
 			break;
 		case SDL_EVENT_MOUSE_WHEEL:
@@ -520,6 +549,14 @@ HL_PRIM void HL_NAME(win_set_text_input_area)( SDL_Window *win, int x, int y, in
 	float d = SDL_GetWindowPixelDensity(win);
 	SDL_Rect r;
 	if( d <= 0 ) d = 1;
+#ifdef HL_IOS
+	{
+		int sx, sy, sw, sh;
+		hl_ios_safe_rect(win, &sx, &sy, &sw, &sh, NULL);
+		x += sx;
+		y += sy;
+	}
+#endif
 	r.x = (int)(x / d);
 	r.y = (int)(y / d);
 	r.w = (int)(w / d);
@@ -685,6 +722,10 @@ HL_PRIM SDL_Window *HL_NAME(win_create_ex)(int x, int y, int width, int height, 
 	}
 
 #ifdef	HL_MOBILE
+#	ifdef HL_IOS
+	// As on a Mac below: without it the screen gets one pixel per point, stretched 2x or 3x.
+	sdlFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#	endif
 	SDL_Window* win = SDL_CreateWindow("", width, height, SDL_WINDOW_BORDERLESS | sdlFlags);
 #else
 	SDL_PropertiesID props = SDL_CreateProperties();
@@ -878,7 +919,15 @@ HL_PRIM bool HL_NAME(win_maximized)(SDL_Window* win) {
 }
 
 HL_PRIM void HL_NAME(win_get_size)(SDL_Window *win, int *width, int *height) {
+#ifdef HL_IOS
+	// what Heaps takes for the window is the safe area: see ios_safe_area.h
+	int sx, sy, sw, sh;
+	hl_ios_safe_rect(win, &sx, &sy, &sw, &sh, NULL);
+	if( width ) *width = sw;
+	if( height ) *height = sh;
+#else
 	SDL_GetWindowSizeInPixels(win, width, height);
+#endif
 }
 
 HL_PRIM void HL_NAME(win_get_min_size)(SDL_Window *win, int *width, int *height) {
@@ -936,12 +985,10 @@ HL_PRIM void HL_NAME(win_raise)(SDL_Window *win) {
 
 HL_PRIM void HL_NAME(win_swap_window)(SDL_Window *win) {
 #if defined(HL_IOS) || defined(HL_TVOS)
-	SDL_SysWMinfo info;
-	SDL_VERSION(&info.version);
-	SDL_GetWindowWMInfo(win, &info);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, info.info.uikit.framebuffer);
-	glBindRenderbuffer(GL_RENDERBUFFER,info.info.uikit.colorbuffer);
+	// SDL3: the view's buffers are window properties (SDL2's SDL_SysWMinfo is gone)
+	SDL_PropertiesID props = SDL_GetWindowProperties(win);
+	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)SDL_GetNumberProperty(props, SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER, 0));
+	glBindRenderbuffer(GL_RENDERBUFFER, (GLuint)SDL_GetNumberProperty(props, SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER, 0));
 #endif
 	SDL_GL_SwapWindow(win);
 }

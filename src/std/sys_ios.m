@@ -60,7 +60,7 @@ const char *hl_sys_special( const char *key ) {
 	else if (strcmp(key, "ios_document_path")==0)
 		return ios_get_document_path();
 	else if (strcmp(key, "ios_retina_scale_factor")==0)
-		return ios_get_retina_scale_factor();
+		return (const char*)(int_val)ios_get_retina_scale_factor();
 	else if (strcmp(key, "ios_device_name")==0)
 		return ios_get_device_name();
 	else
