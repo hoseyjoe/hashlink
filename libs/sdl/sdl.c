@@ -555,6 +555,9 @@ HL_PRIM void HL_NAME(win_set_text_input_area)( SDL_Window *win, int x, int y, in
 		hl_ios_safe_rect(win, &sx, &sy, &sw, &sh, NULL);
 		x += sx;
 		y += sy;
+		// SDL slides the view up until this rect's bottom meets the keyboard's top. The rect is
+		// the line of text: some more, so the field's own border and a gap clear it too.
+		h += (int)(16 * d);
 	}
 #endif
 	r.x = (int)(x / d);
