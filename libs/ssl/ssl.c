@@ -15,7 +15,7 @@ typedef int SOCKET;
 #include <stdio.h>
 #include <string.h>
 
-#ifdef HL_MAC
+#if defined(HL_MAC) || defined(HL_IOS)
 #include <Security/Security.h>
 #endif
 
@@ -93,6 +93,53 @@ static bool is_ssl_ticket( int r ) {
 #endif
 }
 
+#ifdef HL_IOS
+// iOS has no call that lists the system's root certificates (SecTrustCopyAnchorCertificates, which
+// cert_load_defaults uses on the Mac, is macOS only), so a client there has no CA chain to give
+// Mbed TLS and every verified handshake failed. Instead the system is asked whether it trusts the
+// chain the peer sent: a config that requires verification (conf_set_verify) is marked with this
+// callback and set to "optional", so the handshake completes and records what Mbed TLS found, and
+// ssl_handshake then accepts the peer only when Mbed TLS found nothing wrong, or nothing but the
+// missing trust anchor and the system's trust store vouches for the chain.
+static int ios_verify_marker( void *p, mbedtls_x509_crt *crt, int depth, uint32_t *flags ) {
+	return 0;
+}
+
+// The peer's chain as sent, judged by the system as a TLS server's. The name is not checked here:
+// Mbed TLS checks it against ssl_set_hostname and reports a mismatch in the verify result.
+static bool ios_system_trusts( mbedtls_ssl_context *ssl ) {
+	const mbedtls_x509_crt *crt = mbedtls_ssl_get_peer_cert(ssl);
+	CFMutableArrayRef certs;
+	SecPolicyRef policy;
+	SecTrustRef trust = NULL;
+	bool ok = false;
+	if( crt == NULL )
+		return false;
+	certs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+	for( ; crt != NULL; crt = crt->next ) {
+		CFDataRef der = CFDataCreate(kCFAllocatorDefault, crt->raw.p, (CFIndex)crt->raw.len);
+		SecCertificateRef c = der ? SecCertificateCreateWithData(kCFAllocatorDefault, der) : NULL;
+		if( der ) CFRelease(der);
+		if( c == NULL ) {
+			CFRelease(certs);
+			return false;
+		}
+		CFArrayAppendValue(certs, c);
+		CFRelease(c);
+	}
+	policy = SecPolicyCreateSSL(true, NULL);
+	if( SecTrustCreateWithCertificates(certs, policy, &trust) == errSecSuccess && trust != NULL ) {
+		hl_blocking(true);
+		ok = SecTrustEvaluateWithError(trust, NULL);
+		hl_blocking(false);
+	}
+	if( trust ) CFRelease(trust);
+	CFRelease(policy);
+	CFRelease(certs);
+	return ok;
+}
+#endif
+
 static void cert_finalize(hl_ssl_cert *c) {
 	mbedtls_x509_crt_free(c->c);
 	free(c->c);
@@ -138,6 +185,13 @@ HL_PRIM int HL_NAME(ssl_handshake)(mbedtls_ssl_context *ssl) {
 		return -1;
 	if( r == MBEDTLS_ERR_SSL_CONN_EOF )
 		return -2;
+#ifdef HL_IOS
+	if( r == 0 && ssl->MBEDTLS_PRIVATE(conf)->MBEDTLS_PRIVATE(f_vrfy) == ios_verify_marker ) {
+		uint32_t flags = mbedtls_ssl_get_verify_result(ssl);
+		if( flags != 0 && !(flags == MBEDTLS_X509_BADCERT_NOT_TRUSTED && ios_system_trusts(ssl)) )
+			return MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
+	}
+#endif
 	return r;
 }
 
@@ -278,6 +332,14 @@ HL_PRIM void HL_NAME(conf_set_ca)(mbedtls_ssl_config *conf, hl_ssl_cert *cert) {
 }
 
 HL_PRIM void HL_NAME(conf_set_verify)(mbedtls_ssl_config *conf, int mode) {
+#ifdef HL_IOS
+	// Required: checked in ssl_handshake, with the system's trust store (see ios_verify_marker).
+	mbedtls_ssl_conf_verify(conf, mode == 1 ? ios_verify_marker : NULL, NULL);
+	if (mode == 1) {
+		mbedtls_ssl_conf_authmode(conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+		return;
+	}
+#endif
 	if (mode == 2)
 		mbedtls_ssl_conf_authmode(conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
 	else if (mode == 1)
