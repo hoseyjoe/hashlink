@@ -56,6 +56,11 @@ if(WIN32)
     add_subdirectory(directx)
 endif()
 
+option(WITH_VULKAN "Build vulkan.hdll." ON)
+if(WITH_VULKAN AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    add_subdirectory(vulkan)
+endif()
+
 option(WITH_FMT "Build fmt.hdll." ON)
 if(WITH_FMT)
     add_subdirectory(fmt)
